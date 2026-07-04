@@ -23,6 +23,25 @@ Deliberately out of scope for MVP: auth, multi-team/tenancy, invoicing,
 integrations, mobile. The schema keeps these reachable (rates on projects,
 explicit user ids) but we build none of it now.
 
+### Positioning vs solidtime (product north star, 2026-07-04)
+
+solidtime is the closest existing product to what we want, but its
+hierarchy — Organization → Members → Clients → Projects → Tasks, with
+billable rates at four levels plus roles and approvals — is too heavy for
+the individual contributor. Open-Time deliberately flattens all of it:
+
+- No organization or client entities. A project's "client" is an optional
+  text label, nothing more. Never promote it to a table without an explicit
+  product decision.
+- No tasks. The free-text note on a time entry is the only sub-project
+  granularity.
+- One optional hourly rate, on the project. No member/org rate overrides.
+- The IC's entire daily surface is the Timer page: pick project, optionally
+  type a note, start. Two interactions, zero hierarchy.
+
+When in doubt, cut. Admin/SaaS features layer on later; IC simplicity is
+the moat and must never regress.
+
 ## Stack
 
 - Next.js 15, App Router, TypeScript, `src/` directory. No Tailwind — plain
