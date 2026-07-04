@@ -124,6 +124,44 @@ queries). Auth helper `requireUser(req)` / `requireAdmin(req)` in
 
 Design system unchanged (see below). The heatmap uses the accent scale.
 
+## v2.1 — Weekly timesheet grid + report dates (2026-07-04)
+
+### Timesheet page `/timesheet` (all roles, self-only data)
+
+Modeled on the solidtime-style weekly grid the founder supplied:
+
+- Header: `‹` `›` week nav, label `This week · W27` (or `Jun 28 – Jul 4 ·
+  W27` for other weeks; ISO week number of that span's Monday), right-
+  aligned `WEEK TOTAL 12h 00min`.
+- Columns: **Sun-first** (`Sun 28` … `Sat 4`), matching the reference.
+- Rows: one per task the user has completed entries for that week (plus
+  manually added rows); cells show the summed rounded duration for that
+  task+day as `3h 00min` chips, `-` when empty. Bottom `Total` row per
+  day. This page uses `Xh YYmin` formatting; the rest of the app keeps
+  decimal hours.
+- Cells are editable: click → inline input accepting `3`, `3.5`, `3:30`,
+  or `3h 30m`; on save, rounds to 0.5h steps and **replaces that
+  task+day's completed entries with a single synthetic entry** starting
+  at 09:00 local that day. Entering 0 (or clearing) deletes them.
+  Running entries are never touched or counted by the grid.
+- `+ Add row`: task combobox (same component as Timer) adds an empty row
+  client-side. `Copy last week ▾`: adds last week's task rows (rows only,
+  no hours).
+- Nav order: Timer, Timesheet, Calendar, Reports (+ Team admin-only).
+
+### API additions/changes
+
+| Method & path | Behavior |
+|---|---|
+| PUT `/api/timesheet/cell` | self only: `{task, date: 'YYYY-MM-DD', hours}`. Transactionally deletes the caller's COMPLETED entries for that task+local-date and, when hours > 0, inserts one entry `09:00 local + rounded duration`. Returns the new cell hours. 400 on bad hours (<0 or >24) or task format. |
+| GET `/api/reports` | task groups gain `dates: ['YYYY-MM-DD', …]` (distinct local dates worked, ascending) and `lastWorked`; ALL report groups now sort by most recent activity desc (was: seconds desc). |
+
+### Reports page changes
+
+- New "Dates" column for task grouping: ≤3 dates → listed (`Jul 1,
+  Jul 2`), otherwise `Jun 29 – Jul 4 · 5 days`.
+- Rows sorted by most recently worked first (per the API change).
+
 ## Design system (v2 restyle, 2026-07-04)
 
 Written from scratch in our own CSS, visually inspired by cal.com's design
