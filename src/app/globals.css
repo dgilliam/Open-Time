@@ -223,6 +223,7 @@ label {
 
 input[type="text"],
 input[type="email"],
+input[type="password"],
 input[type="number"],
 input[type="date"],
 input[type="datetime-local"],
@@ -239,6 +240,7 @@ select {
 
 input[type="text"]:focus,
 input[type="email"]:focus,
+input[type="password"]:focus,
 input[type="number"]:focus,
 input[type="date"]:focus,
 input[type="datetime-local"]:focus,
@@ -606,4 +608,261 @@ tfoot td {
 .error-text {
   color: var(--danger);
   font-size: 0.875rem;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---------- auth pages (login / setup) ---------- */
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.auth-card h1 {
+  margin: 0;
+}
+
+.auth-card .form {
+  max-width: none;
+}
+
+/* ---------- task combobox ---------- */
+
+.combobox {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.combobox-input {
+  width: 100%;
+}
+
+.combobox-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.combobox-option {
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.combobox-option.active {
+  background: var(--accent-soft);
+}
+
+/* ---------- month calendar ---------- */
+
+.month-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.month-weekday {
+  padding: 0 0.15rem 0.25rem;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.month-cell {
+  min-height: 64px;
+  padding: 0.4rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) calc(var(--tint-alpha, 0) * 100%), var(--background));
+}
+
+.month-cell.out-of-month {
+  opacity: 0.4;
+}
+
+.month-cell.today {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.month-cell-date {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.month-cell.today .month-cell-date {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.month-cell-hours {
+  margin-top: auto;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- heatmap ---------- */
+
+.heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.heatmap-scroll {
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.heatmap-months {
+  display: flex;
+  gap: 3px;
+  margin-left: 28px;
+}
+
+.heatmap-month-label {
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.heatmap-row-label-spacer {
+  display: none;
+}
+
+.heatmap-body {
+  display: flex;
+  gap: 6px;
+}
+
+.heatmap-row-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.heatmap-row-label {
+  height: 11px;
+  line-height: 11px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.heatmap-grid {
+  display: flex;
+  gap: 3px;
+}
+
+.heatmap-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.heatmap-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.heatmap-cell[data-bucket="0"] {
+  background: var(--surface);
+}
+
+.heatmap-cell[data-bucket="1"] {
+  background: color-mix(in srgb, var(--accent) 25%, var(--surface));
+  border-color: transparent;
+}
+
+.heatmap-cell[data-bucket="2"] {
+  background: color-mix(in srgb, var(--accent) 45%, var(--surface));
+  border-color: transparent;
+}
+
+.heatmap-cell[data-bucket="3"] {
+  background: color-mix(in srgb, var(--accent) 68%, var(--surface));
+  border-color: transparent;
+}
+
+.heatmap-cell[data-bucket="4"] {
+  background: color-mix(in srgb, var(--accent) 92%, var(--surface));
+  border-color: transparent;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.heatmap-legend-cell {
+  cursor: default;
+}
+
+/* ---------- reports toolbar ---------- */
+
+.preset-group {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.btn-preset.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--foreground);
+}
+
+.user-select {
+  min-width: 160px;
 }

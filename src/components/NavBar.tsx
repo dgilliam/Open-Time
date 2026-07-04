@@ -1,28 +1,43 @@
 "use client";
 
-// v1's nav depended on UserContext (a v1-only user-picker + localStorage
-// concept, incompatible with real sessions). Session-aware nav — signed-in
-// name, Sign out, Team link for admins — is T6's job (see docs/PLAN.md).
-// This is a compile-safe stub: static links only, no user/session data.
+// Session-aware nav: Timer/Calendar/Reports for everyone, Team for admins
+// only, and a sign-out control at the bottom. Rendered only once AppShell
+// has confirmed a user is signed in, so `user` here is never null in
+// practice — the fallback guards keep this component safe to reuse anywhere.
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { logout } from "@/lib/api";
+import { useSession } from "./SessionContext";
 
-const LINKS = [
+const BASE_LINKS = [
   { href: "/", label: "Timer" },
-  { href: "/timesheet", label: "Timesheet" },
-  { href: "/projects", label: "Projects" },
+  { href: "/calendar", label: "Calendar" },
   { href: "/reports", label: "Reports" },
 ];
 
 export function NavBar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, setUser } = useSession();
+
+  const links =
+    user?.role === "admin" ? [...BASE_LINKS, { href: "/team", label: "Team" }] : BASE_LINKS;
+
+  async function handleSignOut() {
+    try {
+      await logout();
+    } finally {
+      setUser(null);
+      router.replace("/login");
+    }
+  }
 
   return (
     <nav className="nav">
       <div className="nav-brand">Open-Time</div>
       <ul className="nav-links">
-        {LINKS.map((link) => (
+        {links.map((link) => (
           <li key={link.href}>
             <Link href={link.href} className={pathname === link.href ? "nav-link active" : "nav-link"}>
               {link.label}
@@ -30,6 +45,15 @@ export function NavBar() {
           </li>
         ))}
       </ul>
+      {user && (
+        <div className="nav-user">
+          <span className="nav-user-label">Signed in as</span>
+          <span className="strong">{user.name}</span>
+          <button type="button" className="btn-link" onClick={handleSignOut}>
+            Sign out
+          </button>
+        </div>
+      )}
     </nav>
   );
 }
