@@ -1,21 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
+import { hashPassword } from "./auth";
 import { ApiError } from "./types";
-import type { Project, ReportResult, TimeEntry, User } from "./types";
-
-const DEFAULT_PROJECT_COLORS = [
-  "#4f46e5",
-  "#0ea5e9",
-  "#16a34a",
-  "#f59e0b",
-  "#db2777",
-  "#64748b",
-];
-
-function pickDefaultColor(): string {
-  const n = (db.prepare("SELECT COUNT(*) as c FROM projects").get() as { c: number }).c;
-  return DEFAULT_PROJECT_COLORS[n % DEFAULT_PROJECT_COLORS.length];
-}
+import type { CalendarDay, ReportResult, Role, Task, TimeEntry, User } from "./types";
 
 // ---------- row mappers ----------
 
@@ -23,50 +10,34 @@ interface UserRow {
   id: string;
   name: string;
   email: string;
+  password_hash: string;
+  role: Role;
   created_at: string;
 }
 
 function rowToUser(row: UserRow): User {
-  return {
-    id: row.id,
-    name: row.name,
-    email: row.email,
-    createdAt: row.created_at,
-  };
+  return { id: row.id, name: row.name, email: row.email, role: row.role, createdAt: row.created_at };
 }
 
-interface ProjectRow {
+interface TaskRow {
   id: string;
   name: string;
-  client: string | null;
-  color: string;
-  hourly_rate_cents: number | null;
-  archived: number;
   created_at: string;
 }
 
-function rowToProject(row: ProjectRow): Project {
-  return {
-    id: row.id,
-    name: row.name,
-    client: row.client,
-    color: row.color,
-    hourlyRateCents: row.hourly_rate_cents,
-    archived: !!row.archived,
-    createdAt: row.created_at,
-  };
+function rowToTask(row: TaskRow): Task {
+  return { id: row.id, name: row.name, createdAt: row.created_at };
 }
 
 interface EntryRow {
   id: string;
   user_id: string;
-  project_id: string;
-  note: string;
+  task_id: string;
   started_at: string;
   stopped_at: string | null;
+  duration_secs: number | null;
   created_at: string;
-  project_name: string;
-  project_color: string;
+  task_name: string;
   user_name: string;
 }
 
@@ -74,173 +45,147 @@ function rowToEntry(row: EntryRow): TimeEntry {
   return {
     id: row.id,
     userId: row.user_id,
-    projectId: row.project_id,
-    note: row.note,
+    taskId: row.task_id,
     startedAt: row.started_at,
     stoppedAt: row.stopped_at,
+    durationSecs: row.duration_secs,
     createdAt: row.created_at,
-    projectName: row.project_name,
-    projectColor: row.project_color,
+    taskName: row.task_name,
     userName: row.user_name,
   };
 }
 
+// Entries are always joined with their task + user names (see TimeEntry.userName
+// doc comment) — cheap joins, and it keeps route handlers thin since they
+// never need a second query just to label a list for an admin view.
 const ENTRY_SELECT = `
   SELECT
     e.id as id,
     e.user_id as user_id,
-    e.project_id as project_id,
-    e.note as note,
+    e.task_id as task_id,
     e.started_at as started_at,
     e.stopped_at as stopped_at,
+    e.duration_secs as duration_secs,
     e.created_at as created_at,
-    p.name as project_name,
-    p.color as project_color,
+    t.name as task_name,
     u.name as user_name
   FROM time_entries e
-  JOIN projects p ON p.id = e.project_id
+  JOIN tasks t ON t.id = e.task_id
   JOIN users u ON u.id = e.user_id
 `;
 
+// ---------- rounding ----------
+
+/** duration_secs = max(1800, round(rawSeconds / 1800) * 1800) — nearest 0.5h, 0.5h minimum. */
+export function roundDurationSecs(rawSeconds: number): number {
+  return Math.max(1800, Math.round(rawSeconds / 1800) * 1800);
+}
+
 // ---------- users ----------
+
+export function countUsers(): number {
+  return (db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number }).c;
+}
 
 export function listUsers(): User[] {
   const rows = db.prepare("SELECT * FROM users ORDER BY name ASC").all() as UserRow[];
   return rows.map(rowToUser);
 }
 
-export function getUser(id: string): User | null {
+export function getUserById(id: string): User | null {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
   return row ? rowToUser(row) : null;
 }
 
-export function createUser(input: { name: string; email: string }): User {
+/** Includes the password hash — for login verification only, never returned from an API route. */
+export function getUserAuthByEmail(email: string): (User & { passwordHash: string }) | null {
+  const row = db.prepare("SELECT * FROM users WHERE email = ?").get(email.trim().toLowerCase()) as
+    | UserRow
+    | undefined;
+  if (!row) return null;
+  return { ...rowToUser(row), passwordHash: row.password_hash };
+}
+
+export function createUser(input: {
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+}): User {
   const name = (input.name || "").trim();
-  const email = (input.email || "").trim();
+  const email = (input.email || "").trim().toLowerCase();
+  const password = input.password || "";
   if (!name) throw new ApiError(400, "name is required");
   if (!email) throw new ApiError(400, "email is required");
+  if (password.length < 8) throw new ApiError(400, "password must be at least 8 characters");
 
   const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
   if (existing) throw new ApiError(400, "email already in use");
 
   const id = randomUUID();
   const createdAt = new Date().toISOString();
-  db.prepare("INSERT INTO users (id, name, email, created_at) VALUES (?, ?, ?, ?)").run(
-    id,
-    name,
-    email,
-    createdAt
-  );
-  return { id, name, email, createdAt };
+  const passwordHash = hashPassword(password);
+  db.prepare(
+    "INSERT INTO users (id, name, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(id, name, email, passwordHash, input.role, createdAt);
+
+  return { id, name, email, role: input.role, createdAt };
 }
 
-// ---------- projects ----------
+// ---------- tasks ----------
 
-export function listProjects(opts: { includeArchived?: boolean } = {}): Project[] {
-  const sql = opts.includeArchived
-    ? "SELECT * FROM projects ORDER BY name ASC"
-    : "SELECT * FROM projects WHERE archived = 0 ORDER BY name ASC";
-  const rows = db.prepare(sql).all() as ProjectRow[];
-  return rows.map(rowToProject);
-}
+// slug (letters/digits), a dash, then a kebab-case description.
+const TASK_NAME_RE = /^[A-Za-z0-9]+-[A-Za-z0-9][A-Za-z0-9-]*$/;
 
-export function getProject(id: string): Project | null {
-  const row = db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as
-    | ProjectRow
-    | undefined;
-  return row ? rowToProject(row) : null;
-}
-
-export function createProject(input: {
-  name: string;
-  client?: string | null;
-  color?: string | null;
-  hourlyRateCents?: number | null;
-}): Project {
-  const name = (input.name || "").trim();
-  if (!name) throw new ApiError(400, "name is required");
-  if (
-    input.hourlyRateCents !== undefined &&
-    input.hourlyRateCents !== null &&
-    (typeof input.hourlyRateCents !== "number" || input.hourlyRateCents < 0)
-  ) {
-    throw new ApiError(400, "hourlyRateCents must be a non-negative number");
+/** Trims, validates, and normalizes a task name: slug uppercased, rest lowercased. */
+export function normalizeTaskName(raw: string): string {
+  const trimmed = (raw ?? "").trim();
+  if (trimmed.length < 3 || trimmed.length > 120) {
+    throw new ApiError(400, "task name must be between 3 and 120 characters");
   }
+  if (!TASK_NAME_RE.test(trimmed)) {
+    throw new ApiError(
+      400,
+      "task name must look like SLUG-description (a slug, a dash, then a kebab-case description)"
+    );
+  }
+  const dashIndex = trimmed.indexOf("-");
+  const slug = trimmed.slice(0, dashIndex).toUpperCase();
+  const rest = trimmed.slice(dashIndex + 1).toLowerCase();
+  return `${slug}-${rest}`;
+}
+
+export function findOrCreateTask(rawName: string): Task {
+  const name = normalizeTaskName(rawName);
+  const existing = db.prepare("SELECT * FROM tasks WHERE name = ?").get(name) as TaskRow | undefined;
+  if (existing) return rowToTask(existing);
 
   const id = randomUUID();
   const createdAt = new Date().toISOString();
-  const color = input.color && input.color.trim() ? input.color.trim() : pickDefaultColor();
-  const client = input.client ?? null;
-  const hourlyRateCents = input.hourlyRateCents ?? null;
-
-  db.prepare(
-    `INSERT INTO projects (id, name, client, color, hourly_rate_cents, archived, created_at)
-     VALUES (?, ?, ?, ?, ?, 0, ?)`
-  ).run(id, name, client, color, hourlyRateCents, createdAt);
-
-  return {
-    id,
-    name,
-    client,
-    color,
-    hourlyRateCents,
-    archived: false,
-    createdAt,
-  };
+  db.prepare("INSERT INTO tasks (id, name, created_at) VALUES (?, ?, ?)").run(id, name, createdAt);
+  return { id, name, createdAt };
 }
 
-export function updateProject(
-  id: string,
-  patch: {
-    name?: string;
-    client?: string | null;
-    color?: string;
-    hourlyRateCents?: number | null;
-    archived?: boolean;
-  }
-): Project {
-  const existing = getProject(id);
-  if (!existing) throw new ApiError(404, "project not found");
-
-  const name = patch.name !== undefined ? patch.name.trim() : existing.name;
-  if (patch.name !== undefined && !name) throw new ApiError(400, "name cannot be empty");
-
-  const client = patch.client !== undefined ? patch.client : existing.client;
-  const color = patch.color !== undefined ? patch.color : existing.color;
-  const hourlyRateCents =
-    patch.hourlyRateCents !== undefined ? patch.hourlyRateCents : existing.hourlyRateCents;
-  if (
-    hourlyRateCents !== null &&
-    hourlyRateCents !== undefined &&
-    (typeof hourlyRateCents !== "number" || hourlyRateCents < 0)
-  ) {
-    throw new ApiError(400, "hourlyRateCents must be a non-negative number");
-  }
-  const archived = patch.archived !== undefined ? patch.archived : existing.archived;
-
-  db.prepare(
-    `UPDATE projects SET name = ?, client = ?, color = ?, hourly_rate_cents = ?, archived = ?
-     WHERE id = ?`
-  ).run(name, client, color, hourlyRateCents, archived ? 1 : 0, id);
-
-  return {
-    id,
-    name,
-    client,
-    color,
-    hourlyRateCents: hourlyRateCents ?? null,
-    archived: !!archived,
-    createdAt: existing.createdAt,
-  };
+/** Tasks the given user has logged time to, filtered by substring, most recently used first. */
+export function listTasksForUser(userId: string, q: string, limit = 20): Task[] {
+  const like = `%${(q || "").trim().toLowerCase()}%`;
+  const rows = db
+    .prepare(
+      `SELECT t.id as id, t.name as name, t.created_at as created_at
+       FROM tasks t
+       JOIN time_entries e ON e.task_id = t.id
+       WHERE e.user_id = ? AND LOWER(t.name) LIKE ?
+       GROUP BY t.id
+       ORDER BY MAX(e.started_at) DESC
+       LIMIT ?`
+    )
+    .all(userId, like, limit) as TaskRow[];
+  return rows.map(rowToTask);
 }
 
 // ---------- entries ----------
 
-export function listEntries(opts: {
-  userId?: string;
-  from?: string;
-  to?: string;
-} = {}): TimeEntry[] {
+export function listEntries(opts: { userId?: string; from?: string; to?: string } = {}): TimeEntry[] {
   const clauses: string[] = [];
   const params: unknown[] = [];
 
@@ -268,84 +213,63 @@ export function getEntry(id: string): TimeEntry | null {
   return row ? rowToEntry(row) : null;
 }
 
+function validateRange(startedAt: string, stoppedAt: string | null): void {
+  if (isNaN(new Date(startedAt).getTime())) throw new ApiError(400, "startedAt is not a valid date");
+  if (stoppedAt !== null) {
+    if (isNaN(new Date(stoppedAt).getTime())) throw new ApiError(400, "stoppedAt is not a valid date");
+    if (new Date(stoppedAt).getTime() <= new Date(startedAt).getTime()) {
+      throw new ApiError(400, "stoppedAt must be after startedAt");
+    }
+  }
+}
+
 export function createEntry(input: {
   userId: string;
-  projectId: string;
-  note?: string;
+  task: string;
   startedAt: string;
   stoppedAt: string;
 }): TimeEntry {
   if (!input.userId) throw new ApiError(400, "userId is required");
-  if (!input.projectId) throw new ApiError(400, "projectId is required");
+  if (!input.task) throw new ApiError(400, "task is required");
   if (!input.startedAt) throw new ApiError(400, "startedAt is required");
   if (!input.stoppedAt) throw new ApiError(400, "stoppedAt is required");
 
-  const user = getUser(input.userId);
-  if (!user) throw new ApiError(404, "user not found");
-  const project = getProject(input.projectId);
-  if (!project) throw new ApiError(404, "project not found");
+  validateRange(input.startedAt, input.stoppedAt);
 
-  const startedAt = new Date(input.startedAt);
-  const stoppedAt = new Date(input.stoppedAt);
-  if (isNaN(startedAt.getTime())) throw new ApiError(400, "startedAt is not a valid date");
-  if (isNaN(stoppedAt.getTime())) throw new ApiError(400, "stoppedAt is not a valid date");
-  if (stoppedAt.getTime() <= startedAt.getTime()) {
-    throw new ApiError(400, "stoppedAt must be after startedAt");
-  }
+  const task = findOrCreateTask(input.task);
+  const rawSeconds =
+    (new Date(input.stoppedAt).getTime() - new Date(input.startedAt).getTime()) / 1000;
+  const durationSecs = roundDurationSecs(rawSeconds);
 
   const id = randomUUID();
   const createdAt = new Date().toISOString();
-  const note = input.note ?? "";
-
   db.prepare(
-    `INSERT INTO time_entries (id, user_id, project_id, note, started_at, stopped_at, created_at)
+    `INSERT INTO time_entries (id, user_id, task_id, started_at, stopped_at, duration_secs, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, input.userId, input.projectId, note, input.startedAt, input.stoppedAt, createdAt);
+  ).run(id, input.userId, task.id, input.startedAt, input.stoppedAt, durationSecs, createdAt);
 
   return getEntry(id)!;
 }
 
 export function updateEntry(
   id: string,
-  patch: {
-    note?: string;
-    projectId?: string;
-    startedAt?: string;
-    stoppedAt?: string | null;
-  }
+  patch: { task?: string; startedAt?: string; stoppedAt?: string | null }
 ): TimeEntry {
   const existing = getEntry(id);
   if (!existing) throw new ApiError(404, "entry not found");
 
-  if (patch.projectId !== undefined) {
-    const project = getProject(patch.projectId);
-    if (!project) throw new ApiError(404, "project not found");
-  }
-
-  const note = patch.note !== undefined ? patch.note : existing.note;
-  const projectId = patch.projectId !== undefined ? patch.projectId : existing.projectId;
   const startedAt = patch.startedAt !== undefined ? patch.startedAt : existing.startedAt;
   const stoppedAt = patch.stoppedAt !== undefined ? patch.stoppedAt : existing.stoppedAt;
+  validateRange(startedAt, stoppedAt);
 
-  if (patch.startedAt !== undefined && isNaN(new Date(patch.startedAt).getTime())) {
-    throw new ApiError(400, "startedAt is not a valid date");
-  }
-  if (
-    patch.stoppedAt !== undefined &&
-    patch.stoppedAt !== null &&
-    isNaN(new Date(patch.stoppedAt).getTime())
-  ) {
-    throw new ApiError(400, "stoppedAt is not a valid date");
-  }
-  if (stoppedAt) {
-    if (new Date(stoppedAt).getTime() <= new Date(startedAt).getTime()) {
-      throw new ApiError(400, "stoppedAt must be after startedAt");
-    }
-  }
+  const taskId = patch.task !== undefined ? findOrCreateTask(patch.task).id : existing.taskId;
+  const durationSecs = stoppedAt
+    ? roundDurationSecs((new Date(stoppedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+    : null;
 
   db.prepare(
-    `UPDATE time_entries SET note = ?, project_id = ?, started_at = ?, stopped_at = ? WHERE id = ?`
-  ).run(note, projectId, startedAt, stoppedAt, id);
+    `UPDATE time_entries SET task_id = ?, started_at = ?, stopped_at = ?, duration_secs = ? WHERE id = ?`
+  ).run(taskId, startedAt, stoppedAt, durationSecs, id);
 
   return getEntry(id)!;
 }
@@ -365,32 +289,31 @@ export function getRunningEntry(userId: string): TimeEntry | null {
   return row ? rowToEntry(row) : null;
 }
 
-export function startTimer(input: {
-  userId: string;
-  projectId: string;
-  note?: string;
-}): TimeEntry {
+export function startTimer(input: { userId: string; task: string }): TimeEntry {
   if (!input.userId) throw new ApiError(400, "userId is required");
-  if (!input.projectId) throw new ApiError(400, "projectId is required");
+  if (!input.task) throw new ApiError(400, "task is required");
 
-  const user = getUser(input.userId);
-  if (!user) throw new ApiError(404, "user not found");
-  const project = getProject(input.projectId);
-  if (!project) throw new ApiError(404, "project not found");
-
+  const task = findOrCreateTask(input.task);
   const now = new Date().toISOString();
 
   const txn = db.transaction(() => {
+    // At most one running entry per user: auto-stop (and round) any running one.
     const running = getRunningEntry(input.userId);
     if (running) {
-      db.prepare("UPDATE time_entries SET stopped_at = ? WHERE id = ?").run(now, running.id);
+      const rawSeconds = (new Date(now).getTime() - new Date(running.startedAt).getTime()) / 1000;
+      const durationSecs = roundDurationSecs(rawSeconds);
+      db.prepare("UPDATE time_entries SET stopped_at = ?, duration_secs = ? WHERE id = ?").run(
+        now,
+        durationSecs,
+        running.id
+      );
     }
 
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO time_entries (id, user_id, project_id, note, started_at, stopped_at, created_at)
-       VALUES (?, ?, ?, ?, ?, NULL, ?)`
-    ).run(id, input.userId, input.projectId, input.note ?? "", now, now);
+      `INSERT INTO time_entries (id, user_id, task_id, started_at, stopped_at, duration_secs, created_at)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?)`
+    ).run(id, input.userId, task.id, now, now);
     return id;
   });
 
@@ -404,87 +327,96 @@ export function stopTimer(input: { userId: string }): TimeEntry {
   if (!running) throw new ApiError(409, "no running timer for user");
 
   const now = new Date().toISOString();
-  db.prepare("UPDATE time_entries SET stopped_at = ? WHERE id = ?").run(now, running.id);
+  const rawSeconds = (new Date(now).getTime() - new Date(running.startedAt).getTime()) / 1000;
+  const durationSecs = roundDurationSecs(rawSeconds);
+  db.prepare("UPDATE time_entries SET stopped_at = ?, duration_secs = ? WHERE id = ?").run(
+    now,
+    durationSecs,
+    running.id
+  );
   return getEntry(running.id)!;
+}
+
+// ---------- calendar ----------
+
+/**
+ * Buckets an ISO timestamp to a "YYYY-MM-DD" local-date key. v2 has no
+ * per-user timezone setting, so "local" here deliberately means the
+ * timezone the Node server process runs in (its TZ env var / OS default),
+ * derived via Date's local getters — not the viewing browser's timezone.
+ * This is a documented simplification for a single-team internal tool, not
+ * an oversight; revisit if the team ever spans timezones.
+ */
+function localDateKey(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function calendarBuckets(opts: { userId: string; from?: string; to?: string }): CalendarDay[] {
+  const entries = listEntries({ userId: opts.userId, from: opts.from, to: opts.to }).filter(
+    (e) => e.durationSecs !== null
+  );
+
+  const byDate = new Map<string, number>();
+  for (const entry of entries) {
+    const key = localDateKey(entry.startedAt);
+    byDate.set(key, (byDate.get(key) ?? 0) + (entry.durationSecs as number));
+  }
+
+  return Array.from(byDate.entries())
+    .map(([date, secs]) => ({ date, hours: secs / 3600 }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
 // ---------- reports ----------
 
-function secondsBetween(startedAt: string, stoppedAt: string): number {
-  return Math.round((new Date(stoppedAt).getTime() - new Date(startedAt).getTime()) / 1000);
-}
-
 export function report(opts: {
+  userId?: string;
   from?: string;
   to?: string;
-  groupBy: "project" | "user";
+  groupBy: "task" | "user";
 }): ReportResult {
-  const entries = listEntries({ from: opts.from, to: opts.to }).filter(
-    (e) => e.stoppedAt !== null
-  );
-
-  const rateByProjectId = new Map<string, number | null>();
-  for (const p of listProjects({ includeArchived: true })) {
-    rateByProjectId.set(p.id, p.hourlyRateCents);
-  }
-
   interface Acc {
     id: string;
     name: string;
-    seconds: number;
-    billableCents: number | null;
-    hasRate: boolean;
+    secs: number;
   }
   const groups = new Map<string, Acc>();
-  let totalSeconds = 0;
+  let totalSecs = 0;
 
-  for (const entry of entries) {
-    const seconds = secondsBetween(entry.startedAt, entry.stoppedAt as string);
-    totalSeconds += seconds;
-
-    const key = opts.groupBy === "project" ? entry.projectId : entry.userId;
-    const name = opts.groupBy === "project" ? entry.projectName : entry.userName;
-
-    let acc = groups.get(key);
-    if (!acc) {
-      acc = { id: key, name, seconds: 0, billableCents: null, hasRate: false };
-      groups.set(key, acc);
+  if (opts.groupBy === "task") {
+    const entries = listEntries({ userId: opts.userId, from: opts.from, to: opts.to }).filter(
+      (e) => e.durationSecs !== null
+    );
+    for (const e of entries) {
+      const secs = e.durationSecs as number;
+      totalSecs += secs;
+      let acc = groups.get(e.taskId);
+      if (!acc) {
+        acc = { id: e.taskId, name: e.taskName, secs: 0 };
+        groups.set(e.taskId, acc);
+      }
+      acc.secs += secs;
     }
-    acc.seconds += seconds;
-
-    const rate = rateByProjectId.get(entry.projectId) ?? null;
-    if (rate !== null) {
-      acc.hasRate = true;
-      const contribution = Math.round((seconds / 3600) * rate);
-      acc.billableCents = (acc.billableCents ?? 0) + contribution;
+  } else {
+    // groupBy === "user": admin overview across everyone in range (userId filter ignored).
+    const entries = listEntries({ from: opts.from, to: opts.to }).filter((e) => e.durationSecs !== null);
+    for (const e of entries) {
+      const secs = e.durationSecs as number;
+      totalSecs += secs;
+      let acc = groups.get(e.userId);
+      if (!acc) {
+        acc = { id: e.userId, name: e.userName, secs: 0 };
+        groups.set(e.userId, acc);
+      }
+      acc.secs += secs;
     }
   }
 
   const result = Array.from(groups.values())
-    .sort((a, b) => b.seconds - a.seconds)
-    .map((acc) => ({
-      id: acc.id,
-      name: acc.name,
-      seconds: acc.seconds,
-      billableCents: acc.hasRate ? acc.billableCents : null,
-    }));
+    .sort((a, b) => b.secs - a.secs)
+    .map((acc) => ({ id: acc.id, name: acc.name, hours: acc.secs / 3600 }));
 
-  return { groups: result, totalSeconds };
-}
-
-export function entriesForCsv(opts: { from?: string; to?: string } = {}): TimeEntry[] {
-  const clauses: string[] = [];
-  const params: unknown[] = [];
-  if (opts.from) {
-    clauses.push("e.started_at >= ?");
-    params.push(opts.from);
-  }
-  if (opts.to) {
-    clauses.push("e.started_at <= ?");
-    params.push(opts.to);
-  }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  const sql = `${ENTRY_SELECT} ${where} ORDER BY e.started_at ASC`;
-  const rows = db.prepare(sql).all(...params) as EntryRow[];
-  return rows.map(rowToEntry);
+  return { groups: result, totalHours: totalSecs / 3600 };
 }

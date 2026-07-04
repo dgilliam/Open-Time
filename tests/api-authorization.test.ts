@@ -1,0 +1,162 @@
+// Route-handler-level tests: "authorization enforced in routes" (see
+// docs/PLAN.md) means the interesting behavior — a member getting a 403 when
+// targeting another user's data, admin-only endpoints — lives in the route
+// files themselves, not in repo.ts. These tests call the route handlers
+// directly (no HTTP server needed; Next.js route handlers are plain async
+// functions) with a real session cookie to exercise that enforcement.
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { NextRequest } from "next/server";
+
+const tmpDbPath = path.join(os.tmpdir(), `opentime-test-authz-${process.pid}-${Date.now()}.db`);
+process.env.OPENTIME_DB = tmpDbPath;
+
+const { db } = await import("../src/lib/db");
+const repo = await import("../src/lib/repo");
+const auth = await import("../src/lib/auth");
+const entriesRoute = await import("../src/app/api/entries/route");
+const calendarRoute = await import("../src/app/api/calendar/route");
+const usersRoute = await import("../src/app/api/users/route");
+const reportsRoute = await import("../src/app/api/reports/route");
+const tasksRoute = await import("../src/app/api/tasks/route");
+
+function resetDb() {
+  db.exec("DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM sessions; DELETE FROM users;");
+}
+
+function req(url: string, opts: { token?: string; method?: string } = {}) {
+  const headers: Record<string, string> = {};
+  if (opts.token) headers["cookie"] = `${auth.SESSION_COOKIE}=${opts.token}`;
+  return new NextRequest(new URL(url, "http://localhost"), { method: opts.method ?? "GET", headers });
+}
+
+let admin: ReturnType<typeof repo.createUser>;
+let userA: ReturnType<typeof repo.createUser>;
+let userB: ReturnType<typeof repo.createUser>;
+let adminToken: string;
+let tokenA: string;
+let tokenB: string;
+
+beforeEach(() => {
+  resetDb();
+  admin = repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+  userA = repo.createUser({ name: "Alice", email: "alice@example.com", password: "password123", role: "member" });
+  userB = repo.createUser({ name: "Bob", email: "bob@example.com", password: "password123", role: "member" });
+  adminToken = auth.createSession(admin.id).token;
+  tokenA = auth.createSession(userA.id).token;
+  tokenB = auth.createSession(userB.id).token;
+
+  repo.createEntry({
+    userId: userB.id,
+    task: "ab1-bobs-task",
+    startedAt: "2026-01-01T09:00:00.000Z",
+    stoppedAt: "2026-01-01T10:00:00.000Z",
+  });
+});
+
+afterAll(() => {
+  db.close();
+  if (fs.existsSync(tmpDbPath)) fs.unlinkSync(tmpDbPath);
+  const wal = `${tmpDbPath}-wal`;
+  const shm = `${tmpDbPath}-shm`;
+  if (fs.existsSync(wal)) fs.unlinkSync(wal);
+  if (fs.existsSync(shm)) fs.unlinkSync(shm);
+});
+
+describe("GET /api/entries authorization", () => {
+  it("401s with no session", async () => {
+    const res = await entriesRoute.GET(req(`/api/entries?userId=${userB.id}`));
+    expect(res.status).toBe(401);
+  });
+
+  it("403s when a member targets another user's entries", async () => {
+    const res = await entriesRoute.GET(req(`/api/entries?userId=${userB.id}`, { token: tokenA }));
+    expect(res.status).toBe(403);
+  });
+
+  it("200s when a member reads their own entries", async () => {
+    const res = await entriesRoute.GET(req(`/api/entries?userId=${userB.id}`, { token: tokenB }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.length).toBe(1);
+  });
+
+  it("200s when an admin targets another user's entries", async () => {
+    const res = await entriesRoute.GET(req(`/api/entries?userId=${userB.id}`, { token: adminToken }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.length).toBe(1);
+  });
+
+  it("defaults to the caller's own entries when userId is omitted", async () => {
+    const res = await entriesRoute.GET(req(`/api/entries`, { token: tokenA }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data).toEqual([]);
+  });
+});
+
+describe("GET /api/calendar authorization", () => {
+  it("403s when a member targets another user's calendar", async () => {
+    const res = await calendarRoute.GET(req(`/api/calendar?userId=${userB.id}`, { token: tokenA }));
+    expect(res.status).toBe(403);
+  });
+
+  it("200s for admin targeting any user", async () => {
+    const res = await calendarRoute.GET(req(`/api/calendar?userId=${userB.id}`, { token: adminToken }));
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("/api/users authorization (admin only)", () => {
+  it("403s a member listing users", async () => {
+    const res = await usersRoute.GET(req("/api/users", { token: tokenA }));
+    expect(res.status).toBe(403);
+  });
+
+  it("401s with no session", async () => {
+    const res = await usersRoute.GET(req("/api/users"));
+    expect(res.status).toBe(401);
+  });
+
+  it("200s for admin", async () => {
+    const res = await usersRoute.GET(req("/api/users", { token: adminToken }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.length).toBe(3);
+  });
+});
+
+describe("GET /api/reports groupBy=user authorization (admin only)", () => {
+  it("403s a member", async () => {
+    const res = await reportsRoute.GET(req("/api/reports?groupBy=user", { token: tokenA }));
+    expect(res.status).toBe(403);
+  });
+
+  it("200s for admin", async () => {
+    const res = await reportsRoute.GET(req("/api/reports?groupBy=user", { token: adminToken }));
+    expect(res.status).toBe(200);
+  });
+
+  it("403s a member targeting another user's task report", async () => {
+    const res = await reportsRoute.GET(
+      req(`/api/reports?groupBy=task&userId=${userB.id}`, { token: tokenA })
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/tasks scoping", () => {
+  it("only returns the current session user's own tasks", async () => {
+    const res = await tasksRoute.GET(req("/api/tasks", { token: tokenB }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.map((t: { name: string }) => t.name)).toEqual(["AB1-bobs-task"]);
+
+    const resA = await tasksRoute.GET(req("/api/tasks", { token: tokenA }));
+    const jsonA = await resA.json();
+    expect(jsonA.data).toEqual([]);
+  });
+});

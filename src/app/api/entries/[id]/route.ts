@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteEntry, updateEntry } from "@/lib/repo";
-import { apiErrorResponse } from "@/lib/types";
+import { assertSelfOrAdmin, requireUser } from "@/lib/auth";
+import { deleteEntry, getEntry, updateEntry } from "@/lib/repo";
+import { ApiError, apiErrorResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +10,15 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireUser(req);
     const { id } = await context.params;
+    const existing = getEntry(id);
+    if (!existing) throw new ApiError(404, "entry not found");
+    assertSelfOrAdmin(user, existing.userId);
+
     const body = await req.json();
     const entry = updateEntry(id, {
-      note: body?.note,
-      projectId: body?.projectId,
+      task: body?.task,
       startedAt: body?.startedAt,
       stoppedAt: body?.stoppedAt,
     });
@@ -25,11 +30,16 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireUser(req);
     const { id } = await context.params;
+    const existing = getEntry(id);
+    if (!existing) throw new ApiError(404, "entry not found");
+    assertSelfOrAdmin(user, existing.userId);
+
     deleteEntry(id);
     return NextResponse.json({ data: { id } });
   } catch (err) {

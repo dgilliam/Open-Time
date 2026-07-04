@@ -1,141 +1,109 @@
-import { randomUUID } from "node:crypto";
 import { db } from "../src/lib/db";
+import * as repo from "../src/lib/repo";
 
-function isoDaysAgo(days: number, hour: number, minute = 0): string {
+function isoDaysAgo(daysAgo: number, hour: number, minute = 0): string {
   const d = new Date();
   d.setUTCHours(hour, minute, 0, 0);
-  d.setUTCDate(d.getUTCDate() - days);
+  d.setUTCDate(d.getUTCDate() - daysAgo);
   return d.toISOString();
 }
+
+// ~30 tasks in SLUG-kebab-description format.
+const TASK_NAMES = [
+  "GM7VKNDN9Y3F-otp-resend-onboarding",
+  "A1B2C3-fix-login-bug",
+  "K9X2Y8-refactor-timer-ui",
+  "PQ44-write-migration-script",
+  "ZT9-investigate-flaky-test",
+  "R2D2-pairing-session-billing",
+  "OPS12-rotate-db-credentials",
+  "UX8-design-calendar-heatmap",
+  "BUG205-fix-timezone-offset",
+  "API3-add-rate-limiting",
+  "DOCS1-update-readme",
+  "INFRA9-upgrade-node-version",
+  "SEC4-audit-session-expiry",
+  "PERF7-optimize-entries-query",
+  "QA22-write-e2e-tests",
+  "SUP19-customer-escalation-call",
+  "CORE5-task-autocomplete-endpoint",
+  "CORE6-rounding-math-review",
+  "TEAM3-onboard-new-member",
+  "REL8-cut-release-notes",
+  "BUG301-fix-duplicate-entries",
+  "UX9-polish-nav-sidebar",
+  "API4-calendar-endpoint",
+  "INFRA10-backup-automation",
+  "SEC5-scrypt-password-hash",
+  "PERF8-index-time-entries",
+  "QA23-load-test-timer-start",
+  "SUP20-triage-support-inbox",
+  "CORE7-reports-groupby-user",
+  "REL9-tag-v2-release",
+] as const;
 
 function main() {
   console.log("Seeding database...");
 
-  db.exec("DELETE FROM time_entries");
-  db.exec("DELETE FROM projects");
-  db.exec("DELETE FROM users");
+  db.exec("DELETE FROM time_entries; DELETE FROM sessions; DELETE FROM tasks; DELETE FROM users;");
 
-  const now = new Date().toISOString();
+  const admin = repo.createUser({
+    name: "Drew",
+    email: "drew@gilli.am",
+    password: "opentime-dev",
+    role: "admin",
+  });
 
-  const users = [
-    { id: randomUUID(), name: "Ada Lovelace", email: "ada@reposcout.dev" },
-    { id: randomUUID(), name: "Grace Hopper", email: "grace@reposcout.dev" },
-    { id: randomUUID(), name: "Alan Turing", email: "alan@reposcout.dev" },
+  const memberDefs = [
+    { name: "Ada Lovelace", email: "ada@reposcout.dev" },
+    { name: "Grace Hopper", email: "grace@reposcout.dev" },
+    { name: "Alan Turing", email: "alan@reposcout.dev" },
   ];
-  const insertUser = db.prepare(
-    "INSERT INTO users (id, name, email, created_at) VALUES (?, ?, ?, ?)"
+  const members = memberDefs.map((m) =>
+    repo.createUser({ name: m.name, email: m.email, password: "password123", role: "member" })
   );
-  for (const u of users) insertUser.run(u.id, u.name, u.email, now);
+  const allUsers = [admin, ...members];
 
-  const projects = [
-    {
-      id: randomUUID(),
-      name: "RepoScout Core",
-      client: "Internal",
-      color: "#4f46e5",
-      hourlyRateCents: 12000,
-    },
-    {
-      id: randomUUID(),
-      name: "Acme Onboarding",
-      client: "Acme Corp",
-      color: "#0ea5e9",
-      hourlyRateCents: 9500,
-    },
-    {
-      id: randomUUID(),
-      name: "Open Source Maintenance",
-      client: null,
-      color: "#16a34a",
-      hourlyRateCents: null,
-    },
-    {
-      id: randomUUID(),
-      name: "Internal Tooling",
-      client: null,
-      color: "#f59e0b",
-      hourlyRateCents: null,
-    },
-  ];
-  const insertProject = db.prepare(
-    `INSERT INTO projects (id, name, client, color, hourly_rate_cents, archived, created_at)
-     VALUES (?, ?, ?, ?, ?, 0, ?)`
-  );
-  for (const p of projects) {
-    insertProject.run(p.id, p.name, p.client, p.color, p.hourlyRateCents, now);
-  }
-
-  const insertEntry = db.prepare(
-    `INSERT INTO time_entries (id, user_id, project_id, note, started_at, stopped_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
-
-  const notes = [
-    "Bug triage",
-    "Feature work",
-    "Code review",
-    "Client sync",
-    "Writing docs",
-    "Investigating flaky test",
-    "Pairing session",
-    "Sprint planning",
-  ];
+  const tasks = TASK_NAMES.map((name) => repo.findOrCreateTask(name));
 
   let entryCount = 0;
+  const totalDays = 70; // 10 weeks
 
-  // ~2 weeks of plausible entries for all users, skipping weekends.
-  for (let dayOffset = 1; dayOffset <= 14; dayOffset++) {
-    const dayDate = new Date();
-    dayDate.setUTCDate(dayDate.getUTCDate() - dayOffset);
-    const dow = dayDate.getUTCDay();
-    if (dow === 0 || dow === 6) continue; // skip weekends
+  for (const user of allUsers) {
+    for (let daysAgo = 1; daysAgo <= totalDays; daysAgo++) {
+      const dayDate = new Date();
+      dayDate.setUTCDate(dayDate.getUTCDate() - daysAgo);
+      const dow = dayDate.getUTCDay(); // 0 = Sunday .. 6 = Saturday
+      const isWeekend = dow === 0 || dow === 6;
 
-    for (const user of users) {
-      // 1-2 entries per user per day
+      // Weekends are mostly empty; weekdays occasionally empty too, so the
+      // calendar heatmap has realistic gaps rather than solid coverage.
+      if (isWeekend && Math.random() > 0.12) continue;
+      if (!isWeekend && Math.random() < 0.15) continue;
+
       const entriesToday = 1 + Math.floor(Math.random() * 2);
       let hour = 9;
       for (let i = 0; i < entriesToday; i++) {
-        const project = projects[Math.floor(Math.random() * projects.length)];
-        const durationHours = 1 + Math.random() * 3;
-        const startedAt = isoDaysAgo(dayOffset, hour, 0);
-        const stoppedAtDate = new Date(startedAt);
-        stoppedAtDate.setMinutes(
-          stoppedAtDate.getMinutes() + Math.round(durationHours * 60)
-        );
-        const note = notes[Math.floor(Math.random() * notes.length)];
+        if (hour > 18) break;
+        const task = tasks[Math.floor(Math.random() * tasks.length)];
+        const durationHours = 0.5 + Math.random() * 3.5;
+        const startedAt = isoDaysAgo(daysAgo, hour, Math.floor(Math.random() * 60));
+        const stoppedAt = new Date(
+          new Date(startedAt).getTime() + durationHours * 3_600_000
+        ).toISOString();
 
-        insertEntry.run(
-          randomUUID(),
-          user.id,
-          project.id,
-          note,
-          startedAt,
-          stoppedAtDate.toISOString(),
-          now
-        );
+        repo.createEntry({ userId: user.id, task: task.name, startedAt, stoppedAt });
         entryCount++;
         hour += Math.ceil(durationHours) + 1;
       }
     }
   }
 
-  // One currently-running timer for the first user.
-  const runningStart = new Date();
-  runningStart.setMinutes(runningStart.getMinutes() - 42);
-  insertEntry.run(
-    randomUUID(),
-    users[0].id,
-    projects[0].id,
-    "Working on the timesheet view",
-    runningStart.toISOString(),
-    null,
-    now
-  );
-  entryCount++;
-
   console.log(
-    `Seeded ${users.length} users, ${projects.length} projects, ${entryCount} time entries (1 running).`
+    `Seeded ${allUsers.length} users (1 admin, ${members.length} members), ${tasks.length} tasks, ${entryCount} time entries.`
   );
+  console.log("Admin login: drew@gilli.am / opentime-dev");
+  console.log(`Member logins: ${members.map((m) => m.email).join(", ")} / password123`);
 }
 
 main();

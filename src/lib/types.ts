@@ -1,44 +1,46 @@
+export type Role = "admin" | "member";
+
 export interface User {
   id: string;
   name: string;
   email: string;
+  role: Role;
   createdAt: string;
 }
 
-export interface Project {
+export interface Task {
   id: string;
   name: string;
-  client: string | null;
-  color: string;
-  hourlyRateCents: number | null;
-  archived: boolean;
   createdAt: string;
 }
 
 export interface TimeEntry {
   id: string;
   userId: string;
-  projectId: string;
-  note: string;
-  startedAt: string;
-  stoppedAt: string | null;
+  taskId: string;
+  startedAt: string; // ISO-8601 UTC, raw (never modified by rounding)
+  stoppedAt: string | null; // null = running
+  durationSecs: number | null; // null while running; rounded to nearest 0.5h on save
   createdAt: string;
   // joined fields
-  projectName: string;
-  projectColor: string;
+  taskName: string;
   userName: string;
 }
 
 export interface ReportGroup {
   id: string;
   name: string;
-  seconds: number;
-  billableCents: number | null;
+  hours: number;
 }
 
 export interface ReportResult {
   groups: ReportGroup[];
-  totalSeconds: number;
+  totalHours: number;
+}
+
+export interface CalendarDay {
+  date: string; // YYYY-MM-DD, local-date bucketed (see src/lib/repo.ts)
+  hours: number;
 }
 
 export class ApiError extends Error {

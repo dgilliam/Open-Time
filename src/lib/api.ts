@@ -1,6 +1,6 @@
 // Small typed fetch client wrapping the /api contract described in docs/PLAN.md.
 import { ApiError } from "./types";
-import type { Project, ReportResult, TimeEntry, User } from "./types";
+import type { CalendarDay, ReportResult, Task, TimeEntry, User } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -34,46 +34,47 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (json as { data: T }).data;
 }
 
+// ---------- setup ----------
+
+export function getSetupStatus(): Promise<{ needed: boolean }> {
+  return request<{ needed: boolean }>("/api/setup");
+}
+
+export function setup(input: { name: string; email: string; password: string }): Promise<User> {
+  return request<User>("/api/setup", { method: "POST", body: JSON.stringify(input) });
+}
+
+// ---------- auth ----------
+
+export function login(input: { email: string; password: string }): Promise<User> {
+  return request<User>("/api/auth/login", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function logout(): Promise<null> {
+  return request<null>("/api/auth/logout", { method: "POST" });
+}
+
+export function me(): Promise<User | null> {
+  return request<User | null>("/api/auth/me");
+}
+
 // ---------- users ----------
 
 export function listUsers(): Promise<User[]> {
   return request<User[]>("/api/users");
 }
 
-export function createUser(input: { name: string; email: string }): Promise<User> {
+export function createUser(input: { name: string; email: string; password: string }): Promise<User> {
   return request<User>("/api/users", { method: "POST", body: JSON.stringify(input) });
 }
 
-// ---------- projects ----------
+// ---------- tasks ----------
 
-export function listProjects(opts: { includeArchived?: boolean } = {}): Promise<Project[]> {
-  const qs = opts.includeArchived ? "?includeArchived=1" : "";
-  return request<Project[]>(`/api/projects${qs}`);
-}
-
-export function createProject(input: {
-  name: string;
-  client?: string | null;
-  color?: string | null;
-  hourlyRateCents?: number | null;
-}): Promise<Project> {
-  return request<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) });
-}
-
-export function updateProject(
-  id: string,
-  patch: {
-    name?: string;
-    client?: string | null;
-    color?: string;
-    hourlyRateCents?: number | null;
-    archived?: boolean;
-  }
-): Promise<Project> {
-  return request<Project>(`/api/projects/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+export function listTasks(q = ""): Promise<Task[]> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  const qs = params.toString();
+  return request<Task[]>(`/api/tasks${qs ? `?${qs}` : ""}`);
 }
 
 // ---------- entries ----------
@@ -87,19 +88,13 @@ export function listEntries(opts: { userId?: string; from?: string; to?: string 
   return request<TimeEntry[]>(`/api/entries${qs ? `?${qs}` : ""}`);
 }
 
-export function createEntry(input: {
-  userId: string;
-  projectId: string;
-  note?: string;
-  startedAt: string;
-  stoppedAt: string;
-}): Promise<TimeEntry> {
+export function createEntry(input: { task: string; startedAt: string; stoppedAt: string }): Promise<TimeEntry> {
   return request<TimeEntry>("/api/entries", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function updateEntry(
   id: string,
-  patch: { note?: string; projectId?: string; startedAt?: string; stoppedAt?: string | null }
+  patch: { task?: string; startedAt?: string; stoppedAt?: string | null }
 ): Promise<TimeEntry> {
   return request<TimeEntry>(`/api/entries/${id}`, {
     method: "PATCH",
@@ -113,32 +108,37 @@ export function deleteEntry(id: string): Promise<{ id: string }> {
 
 // ---------- timer ----------
 
-export function getRunningEntry(userId: string): Promise<TimeEntry | null> {
-  return request<TimeEntry | null>(`/api/timer?userId=${encodeURIComponent(userId)}`);
+export function getRunningEntry(): Promise<TimeEntry | null> {
+  return request<TimeEntry | null>("/api/timer");
 }
 
-export function startTimer(input: { userId: string; projectId: string; note?: string }): Promise<TimeEntry> {
+export function startTimer(input: { task: string }): Promise<TimeEntry> {
   return request<TimeEntry>("/api/timer/start", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function stopTimer(input: { userId: string }): Promise<TimeEntry> {
-  return request<TimeEntry>("/api/timer/stop", { method: "POST", body: JSON.stringify(input) });
+export function stopTimer(): Promise<TimeEntry> {
+  return request<TimeEntry>("/api/timer/stop", { method: "POST" });
+}
+
+// ---------- calendar ----------
+
+export function getCalendar(opts: { userId?: string; from: string; to: string }): Promise<CalendarDay[]> {
+  const params = new URLSearchParams({ from: opts.from, to: opts.to });
+  if (opts.userId) params.set("userId", opts.userId);
+  return request<CalendarDay[]>(`/api/calendar?${params.toString()}`);
 }
 
 // ---------- reports ----------
 
 export function getReport(opts: {
+  userId?: string;
   from: string;
   to: string;
-  groupBy: "project" | "user";
+  groupBy: "task" | "user";
 }): Promise<ReportResult> {
   const params = new URLSearchParams({ from: opts.from, to: opts.to, groupBy: opts.groupBy });
+  if (opts.userId) params.set("userId", opts.userId);
   return request<ReportResult>(`/api/reports?${params.toString()}`);
-}
-
-export function reportsCsvUrl(opts: { from: string; to: string }): string {
-  const params = new URLSearchParams({ from: opts.from, to: opts.to });
-  return `/api/reports/csv?${params.toString()}`;
 }
 
 export { ApiError };
