@@ -554,6 +554,99 @@ describe("report — dates + recency sort (v2.1)", () => {
   });
 });
 
+describe("report — admin all-users task aggregation (v2.2)", () => {
+  it("aggregates hours per task across every user and attaches sorted contributors", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab40-shared",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z", // 1h, Alice
+    });
+    repo.createEntry({
+      userId: userB.id,
+      task: "ab40-shared",
+      startedAt: "2026-01-02T09:00:00.000Z",
+      stoppedAt: "2026-01-02T11:00:00.000Z", // 2h, Bob
+    });
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab41-solo",
+      startedAt: "2026-01-03T09:00:00.000Z",
+      stoppedAt: "2026-01-03T09:30:00.000Z", // 0.5h, Alice only
+    });
+
+    const result = repo.report({ userId: "all", groupBy: "task" });
+    expect(result.totalHours).toBe(3.5);
+
+    const shared = result.groups.find((g) => g.name === "AB40-shared")!;
+    expect(shared.hours).toBe(3);
+    expect(shared.contributors).toEqual([
+      { id: userB.id, name: "Bob", hours: 2 },
+      { id: userA.id, name: "Alice", hours: 1 },
+    ]);
+
+    const solo = result.groups.find((g) => g.name === "AB41-solo")!;
+    expect(solo.hours).toBe(0.5);
+    expect(solo.contributors).toEqual([{ id: userA.id, name: "Alice", hours: 0.5 }]);
+  });
+
+  it("sums a single contributor's repeated entries into one contributor row", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab42-repeat",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab42-repeat",
+      startedAt: "2026-01-02T09:00:00.000Z",
+      stoppedAt: "2026-01-02T10:00:00.000Z",
+    });
+
+    const result = repo.report({ userId: "all", groupBy: "task" });
+    const group = result.groups.find((g) => g.name === "AB42-repeat")!;
+    expect(group.contributors).toEqual([{ id: userA.id, name: "Alice", hours: 2 }]);
+  });
+
+  it("leaves contributors unset for single-user task reports and for groupBy=user", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab43-self",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+
+    const selfReport = repo.report({ userId: userA.id, groupBy: "task" });
+    expect(selfReport.groups[0].contributors).toBeUndefined();
+
+    const userReport = repo.report({ groupBy: "user" });
+    expect(userReport.groups[0].contributors).toBeUndefined();
+  });
+});
+
+describe("listEntries with userId=all", () => {
+  it("returns every user's entries, same as omitting userId", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab44-a",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    repo.createEntry({
+      userId: userB.id,
+      task: "ab45-b",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+
+    const all = repo.listEntries({ userId: "all" });
+    const omitted = repo.listEntries({});
+    expect(all.length).toBe(2);
+    expect(all.map((e) => e.id).sort()).toEqual(omitted.map((e) => e.id).sort());
+  });
+});
+
 describe("setTimesheetCell", () => {
   it("creates a synthetic 09:00-local entry for a fresh cell", () => {
     const result = repo.setTimesheetCell({

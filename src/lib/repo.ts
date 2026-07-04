@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import { ApiError } from "./types";
-import type { CalendarDay, ReportResult, Role, Task, TimeEntry, User } from "./types";
+import type { CalendarDay, ReportGroup, ReportResult, Role, Task, TimeEntry, User } from "./types";
 
 // ---------- row mappers ----------
 
@@ -189,7 +189,10 @@ export function listEntries(opts: { userId?: string; from?: string; to?: string 
   const clauses: string[] = [];
   const params: unknown[] = [];
 
-  if (opts.userId) {
+  // "all" is the admin-dashboard sentinel for "every user" (admin-gated by the
+  // route via assertSelfOrAdmin before this is ever reached) — same as
+  // omitting userId entirely.
+  if (opts.userId && opts.userId !== "all") {
     clauses.push("e.user_id = ?");
     params.push(opts.userId);
   }
@@ -372,7 +375,7 @@ export function calendarBuckets(opts: { userId: string; from?: string; to?: stri
 // ---------- reports ----------
 
 export function report(opts: {
-  userId?: string;
+  userId?: string; // "all" = cross-team aggregation (admin-gated by the route); groupBy=task only
   from?: string;
   to?: string;
   groupBy: "task" | "user";
@@ -382,19 +385,39 @@ export function report(opts: {
     name: string;
     secs: number;
     dates: Set<string>;
+    contributors?: Map<string, { name: string; secs: number }>;
   }
   const groups = new Map<string, Acc>();
   let totalSecs = 0;
 
-  function addToGroup(key: string, name: string, secs: number, dateKey: string): void {
+  // Only the admin dashboard's cross-team task grouping (groupBy=task,
+  // userId=all) tracks per-contributor breakdowns; single-user/self task
+  // groups and groupBy=user groups leave `contributors` unset.
+  const withContributors = opts.groupBy === "task" && opts.userId === "all";
+
+  function addToGroup(
+    key: string,
+    name: string,
+    secs: number,
+    dateKey: string,
+    contributor?: { id: string; name: string }
+  ): void {
     totalSecs += secs;
     let acc = groups.get(key);
     if (!acc) {
-      acc = { id: key, name, secs: 0, dates: new Set() };
+      acc = { id: key, name, secs: 0, dates: new Set(), contributors: withContributors ? new Map() : undefined };
       groups.set(key, acc);
     }
     acc.secs += secs;
     acc.dates.add(dateKey);
+    if (withContributors && contributor) {
+      const existing = acc.contributors!.get(contributor.id);
+      if (existing) {
+        existing.secs += secs;
+      } else {
+        acc.contributors!.set(contributor.id, { name: contributor.name, secs });
+      }
+    }
   }
 
   if (opts.groupBy === "task") {
@@ -402,7 +425,10 @@ export function report(opts: {
       (e) => e.durationSecs !== null
     );
     for (const e of entries) {
-      addToGroup(e.taskId, e.taskName, e.durationSecs as number, localDateKey(e.startedAt));
+      addToGroup(e.taskId, e.taskName, e.durationSecs as number, localDateKey(e.startedAt), {
+        id: e.userId,
+        name: e.userName,
+      });
     }
   } else {
     // groupBy === "user": admin overview across everyone in range (userId filter ignored).
@@ -416,13 +442,19 @@ export function report(opts: {
   const result = Array.from(groups.values())
     .map((acc) => {
       const dates = Array.from(acc.dates).sort();
-      return {
+      const group: ReportGroup = {
         id: acc.id,
         name: acc.name,
         hours: acc.secs / 3600,
         dates,
         lastWorked: dates[dates.length - 1],
       };
+      if (withContributors) {
+        group.contributors = Array.from(acc.contributors!.entries())
+          .map(([id, c]) => ({ id, name: c.name, hours: c.secs / 3600 }))
+          .sort((a, b) => b.hours - a.hours);
+      }
+      return group;
     })
     .sort((a, b) => {
       if (a.lastWorked !== b.lastWorked) return a.lastWorked < b.lastWorked ? 1 : -1;

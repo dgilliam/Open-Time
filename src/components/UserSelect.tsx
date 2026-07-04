@@ -10,16 +10,20 @@ export function UserSelect({
   value,
   onChange,
   label = "Viewing",
+  includeAll = false,
 }: {
   users: User[];
   value: string;
   onChange: (userId: string) => void;
   label?: string;
+  /** Prepends an "All" option (value "all") — used by the admin dashboard's entries filter. */
+  includeAll?: boolean;
 }) {
   return (
     <label className="inline-label user-select">
       {label}
       <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {includeAll && <option value="all">All</option>}
         {users.map((u) => (
           <option key={u.id} value={u.id}>
             {u.name}

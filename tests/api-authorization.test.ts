@@ -98,6 +98,28 @@ describe("GET /api/entries authorization", () => {
   });
 });
 
+describe("GET /api/entries?userId=all authorization (v2.2 admin dashboard)", () => {
+  it("403s a member requesting userId=all", async () => {
+    const res = await entriesRoute.GET(req(`/api/entries?userId=all`, { token: tokenA }));
+    expect(res.status).toBe(403);
+  });
+
+  it("200s for admin and returns every user's entries", async () => {
+    await repo.createEntry({
+      userId: userA.id,
+      task: "ab46-alice-task",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    const res = await entriesRoute.GET(req(`/api/entries?userId=all`, { token: adminToken }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // 1 entry from beforeEach (userB) + 1 just created (userA).
+    expect(json.data.length).toBe(2);
+    expect(json.data.map((e: { userId: string }) => e.userId).sort()).toEqual([userA.id, userB.id].sort());
+  });
+});
+
 describe("GET /api/calendar authorization", () => {
   it("403s when a member targets another user's calendar", async () => {
     const res = await calendarRoute.GET(req(`/api/calendar?userId=${userB.id}`, { token: tokenA }));
@@ -145,6 +167,44 @@ describe("GET /api/reports groupBy=user authorization (admin only)", () => {
       req(`/api/reports?groupBy=task&userId=${userB.id}`, { token: tokenA })
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/reports?groupBy=task&userId=all authorization (v2.2 admin dashboard)", () => {
+  it("403s a member requesting userId=all", async () => {
+    const res = await reportsRoute.GET(
+      req(`/api/reports?groupBy=task&userId=all`, { token: tokenA })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("200s for admin with contributors aggregated across every user", async () => {
+    await repo.createEntry({
+      userId: userA.id,
+      task: "ab47-cross-team",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z", // 1h
+    });
+    // beforeEach already logged userB 1h on "ab1-bobs-task"; add userB time
+    // on the same task as userA so contributors has two entries to sort.
+    await repo.createEntry({
+      userId: userB.id,
+      task: "ab47-cross-team",
+      startedAt: "2026-01-02T09:00:00.000Z",
+      stoppedAt: "2026-01-02T11:00:00.000Z", // 2h
+    });
+
+    const res = await reportsRoute.GET(
+      req(`/api/reports?groupBy=task&userId=all`, { token: adminToken })
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    const group = json.data.groups.find((g: { name: string }) => g.name === "AB47-cross-team");
+    expect(group.hours).toBe(3);
+    expect(group.contributors).toEqual([
+      { id: userB.id, name: "Bob", hours: 2 },
+      { id: userA.id, name: "Alice", hours: 1 },
+    ]);
   });
 });
 

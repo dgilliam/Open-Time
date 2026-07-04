@@ -1,9 +1,10 @@
 "use client";
 
-// Session-aware nav: Timer/Calendar/Reports for everyone, Team for admins
-// only, and a sign-out control at the bottom. Rendered only once AppShell
-// has confirmed a user is signed in, so `user` here is never null in
-// practice — the fallback guards keep this component safe to reuse anywhere.
+// Session-aware nav: Timer/Timesheet/Calendar/Reports for everyone, Dashboard
+// + Team for admins only, and a sign-out control at the bottom. Rendered only
+// once AppShell has confirmed a user is signed in, so `user` here is never
+// null in practice — the fallback guards keep this component safe to reuse
+// anywhere.
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -23,7 +24,9 @@ export function NavBar() {
   const { user, setUser } = useSession();
 
   const links =
-    user?.role === "admin" ? [...BASE_LINKS, { href: "/team", label: "Team" }] : BASE_LINKS;
+    user?.role === "admin"
+      ? [{ href: "/dashboard", label: "Dashboard" }, ...BASE_LINKS, { href: "/team", label: "Team" }]
+      : BASE_LINKS;
 
   async function handleSignOut() {
     try {

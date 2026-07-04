@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/");
+    if (!loading && user) router.replace(user.role === "admin" ? "/dashboard" : "/");
   }, [loading, user, router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -24,9 +24,9 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login({ email, password });
+      const loggedIn = await login({ email, password });
       await refresh();
-      router.replace("/");
+      router.replace(loggedIn.role === "admin" ? "/dashboard" : "/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "failed to sign in");
     } finally {

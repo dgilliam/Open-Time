@@ -23,7 +23,7 @@ Seeded logins:
 | Who | Email | Password |
 |---|---|---|
 | Admin | `drew@gilli.am` | `opentime-dev` |
-| Members | `ada@reposcout.dev`, `grace@reposcout.dev`, `alan@reposcout.dev` | `password123` |
+| Members | `ada@reposcout.dev`, `grace@reposcout.dev`, `alan@reposcout.dev`, `margaret@reposcout.dev`, `katherine@reposcout.dev` | `password123` |
 
 On an empty database (no seed), the app walks you through `/setup` to
 create the admin account. Admins create members from the Team page —

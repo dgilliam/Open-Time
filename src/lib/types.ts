@@ -27,12 +27,22 @@ export interface TimeEntry {
   userName: string;
 }
 
+export interface Contributor {
+  id: string;
+  name: string;
+  hours: number;
+}
+
 export interface ReportGroup {
   id: string;
   name: string;
   hours: number;
   dates: string[]; // distinct local YYYY-MM-DD dates worked, ascending
   lastWorked: string; // most recent local date worked, YYYY-MM-DD
+  // Only populated for groupBy=task&userId=all (admin dashboard's cross-team
+  // task view); desc by hours. Single-user/self task groups and groupBy=user
+  // groups never set this.
+  contributors?: Contributor[];
 }
 
 export interface ReportResult {

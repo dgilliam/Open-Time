@@ -79,6 +79,7 @@ export function listTasks(q = ""): Promise<Task[]> {
 
 // ---------- entries ----------
 
+/** `userId: "all"` is admin-only (403 for members) and returns every user's entries — see the admin dashboard. */
 export function listEntries(opts: { userId?: string; from?: string; to?: string } = {}): Promise<TimeEntry[]> {
   const params = new URLSearchParams();
   if (opts.userId) params.set("userId", opts.userId);
@@ -130,6 +131,11 @@ export function getCalendar(opts: { userId?: string; from: string; to: string })
 
 // ---------- reports ----------
 
+/**
+ * `groupBy: "task"` with `userId: "all"` is admin-only and aggregates every
+ * user's hours per task, with each group's `contributors` populated — see
+ * the admin dashboard.
+ */
 export function getReport(opts: {
   userId?: string;
   from: string;

@@ -58,6 +58,8 @@ function main() {
     { name: "Ada Lovelace", email: "ada@reposcout.dev" },
     { name: "Grace Hopper", email: "grace@reposcout.dev" },
     { name: "Alan Turing", email: "alan@reposcout.dev" },
+    { name: "Margaret Hamilton", email: "margaret@reposcout.dev" },
+    { name: "Katherine Johnson", email: "katherine@reposcout.dev" },
   ];
   const members = memberDefs.map((m) =>
     repo.createUser({ name: m.name, email: m.email, password: "password123", role: "member" })
