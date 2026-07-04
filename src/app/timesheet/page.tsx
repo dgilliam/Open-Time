@@ -120,12 +120,12 @@ export default function TimesheetPage() {
               <tr>
                 <th>Project</th>
                 {DAY_LABELS.map((label, i) => (
-                  <th key={label}>
+                  <th key={label} className="num">
                     {label}
                     <div className="muted small">{formatShortDate(addDays(weekStart, i))}</div>
                   </th>
                 ))}
-                <th>Total</th>
+                <th className="num">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -138,9 +138,11 @@ export default function TimesheetPage() {
                     </span>
                   </td>
                   {row.days.map((seconds, i) => (
-                    <td key={i}>{seconds > 0 ? hoursLabel(seconds) : <span className="muted">–</span>}</td>
+                    <td key={i} className="num">
+                      {seconds > 0 ? hoursLabel(seconds) : <span className="muted">–</span>}
+                    </td>
                   ))}
-                  <td className="strong">{hoursLabel(row.total)}</td>
+                  <td className="strong num">{hoursLabel(row.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -148,11 +150,11 @@ export default function TimesheetPage() {
               <tr>
                 <td className="strong">Total</td>
                 {dayTotals.map((seconds, i) => (
-                  <td key={i} className="strong">
+                  <td key={i} className="strong num">
                     {seconds > 0 ? hoursLabel(seconds) : <span className="muted">–</span>}
                   </td>
                 ))}
-                <td className="strong">{hoursLabel(grandTotal)}</td>
+                <td className="strong num">{hoursLabel(grandTotal)}</td>
               </tr>
             </tfoot>
           </table>

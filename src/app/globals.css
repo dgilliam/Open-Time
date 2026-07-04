@@ -1,24 +1,49 @@
 :root {
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+
+  /* neutrals (light) */
+  --background: #ffffff;
+  --surface: #f9fafb;
+  --border: #e5e7eb;
+  --foreground: #111827;
+  --muted: #6b7280;
+
+  /* accent — placeholder until RepoScout brand hexes are provided. Used only
+     for the active nav item, the running-timer highlight, and focus rings. */
   --accent: #4f46e5;
   --accent-contrast: #ffffff;
-  --background: #ffffff;
-  --surface: #f8f9fb;
-  --foreground: #171717;
-  --muted: #6b7280;
-  --border: #e2e4e9;
+  --accent-soft: rgba(79, 70, 229, 0.08);
+  --accent-ring: rgba(79, 70, 229, 0.18);
+
   --danger: #dc2626;
   --danger-contrast: #ffffff;
+
+  /* buttons */
+  --btn-primary-bg: #111827;
+  --btn-primary-fg: #ffffff;
+  --btn-primary-hover-bg: #262f3d;
+
+  --control-height: 36px;
+  --radius: 6px;
+  --radius-lg: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b0d12;
-    --surface: #14161d;
-    --foreground: #ececed;
-    --muted: #8b8f9a;
-    --border: #262932;
-    --danger: #f87171;
-    --danger-contrast: #1a1a1a;
+    --background: #101010;
+    --surface: #171717;
+    --border: #2e2e2e;
+    --foreground: #f3f4f6;
+    --muted: #9ca3af;
+
+    --accent-soft: rgba(129, 140, 248, 0.16);
+    --accent-ring: rgba(129, 140, 248, 0.35);
+
+    /* primary button inverts in dark mode: white bg, near-black text */
+    --btn-primary-bg: #f3f4f6;
+    --btn-primary-fg: #111827;
+    --btn-primary-hover-bg: #d1d5db;
   }
 }
 
@@ -32,10 +57,12 @@ body {
 }
 
 body {
+  margin: 0;
   color: var(--foreground);
   background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
@@ -43,12 +70,15 @@ a {
 }
 
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin: 0 0 1rem;
 }
 
 h2 {
-  font-size: 1.1rem;
+  font-size: 1rem;
+  font-weight: 600;
   margin: 0 0 0.75rem;
 }
 
@@ -71,9 +101,11 @@ h2 {
 }
 
 .nav-brand {
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+  padding: 0 0.5rem;
 }
 
 .nav-links {
@@ -82,33 +114,42 @@ h2 {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.15rem;
 }
 
 .nav-link {
   display: block;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius);
   text-decoration: none;
-  color: var(--foreground);
-  font-size: 0.95rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .nav-link:hover {
   background: var(--border);
+  color: var(--foreground);
 }
 
 .nav-link.active {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--accent-soft);
+  color: var(--foreground);
+}
+
+.nav-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .nav-user {
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
   font-size: 0.85rem;
+  padding: 0 0.5rem;
 }
 
 .nav-user-label {
@@ -116,6 +157,7 @@ h2 {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  font-weight: 600;
 }
 
 .nav-user .btn-link {
@@ -137,66 +179,98 @@ h2 {
 .section {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
 }
 
 /* ---------- form controls ---------- */
 
 input,
 select,
-button {
+button,
+textarea {
   font-family: inherit;
-  font-size: 0.95rem;
-}
-
-input[type="text"],
-input[type="number"],
-input[type="date"],
-input[type="datetime-local"],
-select {
-  padding: 0.4rem 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--background);
-  color: var(--foreground);
-}
-
-input[type="color"] {
-  width: 2.5rem;
-  height: 2.2rem;
-  padding: 0.15rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--background);
+  font-size: 0.9rem;
 }
 
 label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.85rem;
+  gap: 0.3rem;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--muted);
 }
 
 .inline-label {
   flex-direction: row;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   color: var(--foreground);
 }
 
 .checkbox-label {
   flex-direction: row;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   color: var(--foreground);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+input[type="datetime-local"],
+select {
+  height: var(--control-height);
+  padding: 0 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+input[type="datetime-local"]:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+input[type="color"] {
+  width: 2.5rem;
+  height: var(--control-height);
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+}
+
+input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.85rem;
   max-width: 360px;
 }
 
@@ -213,37 +287,47 @@ label {
 
 /* ---------- buttons ---------- */
 
-.btn {
+.btn,
+.btn-primary,
+.btn-danger {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.45rem 0.9rem;
-  border-radius: 6px;
+  justify-content: center;
+  gap: 0.4rem;
+  height: var(--control-height);
+  padding: 0 1rem;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--background);
   color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
   cursor: pointer;
   text-decoration: none;
-  line-height: 1.2;
+  transition: background-color 0.12s ease, filter 0.12s ease, opacity 0.12s ease;
 }
 
 .btn:hover {
-  background: var(--border);
+  background: var(--surface);
 }
 
-.btn:disabled {
+.btn:disabled,
+.btn-primary:disabled,
+.btn-danger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
 }
 
 .btn-primary:hover {
-  filter: brightness(1.08);
+  background: var(--btn-primary-hover-bg);
+  border-color: var(--btn-primary-hover-bg);
 }
 
 .btn-danger {
@@ -252,14 +336,40 @@ label {
   color: var(--danger-contrast);
 }
 
+.btn-danger:hover {
+  filter: brightness(0.92);
+}
+
+.btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-danger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   border: none;
   background: none;
+  border-radius: var(--radius);
   color: var(--muted);
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   line-height: 1;
   cursor: pointer;
-  padding: 0.1rem 0.4rem;
+}
+
+.btn-icon:hover {
+  background: var(--border);
+  color: var(--foreground);
+}
+
+.btn-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .btn-link {
@@ -269,7 +379,22 @@ label {
   cursor: pointer;
   padding: 0;
   font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.btn-link:hover {
   text-decoration: underline;
+}
+
+.btn-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .btn-link-danger {
@@ -292,8 +417,8 @@ label {
 
 .timer-bar {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
   background: var(--surface);
 }
 
@@ -318,28 +443,32 @@ label {
 
 .timer-elapsed {
   font-variant-numeric: tabular-nums;
-  font-size: 2rem;
-  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   min-width: 8ch;
+  border-left: 3px solid var(--accent);
+  padding-left: 0.85rem;
 }
 
 .timer-info {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
   flex: 1;
 }
 
 .timer-project {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   font-weight: 600;
 }
 
 .timer-note {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
 }
 
 /* ---------- tables ---------- */
@@ -351,7 +480,7 @@ label {
 table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
 }
 
 .entry-table,
@@ -362,26 +491,32 @@ table {
 th,
 td {
   text-align: left;
-  padding: 0.5rem 0.65rem;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 th {
   color: var(--muted);
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
 }
 
 tfoot td {
   border-top: 2px solid var(--border);
   border-bottom: none;
+  font-weight: 600;
 }
 
 .strong {
-  font-weight: 700;
+  font-weight: 600;
+}
+
+.num {
+  text-align: right;
 }
 
 .row-actions {
@@ -393,24 +528,25 @@ tfoot td {
 .project-cell {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
 }
 
 .color-dot {
   display: inline-block;
-  width: 0.7rem;
-  height: 0.7rem;
+  width: 0.65rem;
+  height: 0.65rem;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .badge {
   display: inline-block;
-  padding: 0.15rem 0.5rem;
+  padding: 0.15rem 0.55rem;
   border-radius: 999px;
   background: var(--border);
   color: var(--muted);
   font-size: 0.75rem;
+  font-weight: 500;
 }
 
 /* ---------- dialog ---------- */
@@ -427,10 +563,10 @@ tfoot td {
 }
 
 .dialog {
-  background: var(--background);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
   width: 100%;
   max-width: 420px;
   max-height: 90vh;
@@ -441,12 +577,13 @@ tfoot td {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .dialog-header h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .dialog-actions {
@@ -468,5 +605,5 @@ tfoot td {
 
 .error-text {
   color: var(--danger);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
 }

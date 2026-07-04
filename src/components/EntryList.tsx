@@ -49,7 +49,7 @@ export function EntryList({
             <th>Note</th>
             <th>Start</th>
             <th>Stop</th>
-            <th>Duration</th>
+            <th className="num">Duration</th>
             <th></th>
           </tr>
         </thead>
@@ -65,7 +65,7 @@ export function EntryList({
               <td>{entry.note || <span className="muted">—</span>}</td>
               <td>{formatTime(entry.startedAt)}</td>
               <td>{entry.stoppedAt ? formatTime(entry.stoppedAt) : <span className="muted">running</span>}</td>
-              <td>{hoursLabel(durationSeconds(entry.startedAt, entry.stoppedAt))}</td>
+              <td className="num">{hoursLabel(durationSeconds(entry.startedAt, entry.stoppedAt))}</td>
               <td className="row-actions">
                 <button type="button" className="btn-link" onClick={() => setEditing(entry)}>
                   Edit

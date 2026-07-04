@@ -135,7 +135,7 @@ export default function ProjectsPage() {
               <tr>
                 <th>Project</th>
                 <th>Client</th>
-                <th>Rate</th>
+                <th className="num">Rate</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -150,7 +150,9 @@ export default function ProjectsPage() {
                     </span>
                   </td>
                   <td>{p.client || <span className="muted">—</span>}</td>
-                  <td>{p.hourlyRateCents === null ? "—" : `${formatDollars(p.hourlyRateCents)}/h`}</td>
+                  <td className="num">
+                    {p.hourlyRateCents === null ? "—" : `${formatDollars(p.hourlyRateCents)}/h`}
+                  </td>
                   <td>{p.archived && <span className="badge">Archived</span>}</td>
                   <td className="row-actions">
                     <button type="button" className="btn-link" onClick={() => setEditing(p)}>

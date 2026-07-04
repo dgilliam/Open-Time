@@ -136,8 +136,8 @@ export default function ReportsPage() {
           <thead>
             <tr>
               <th>{groupBy === "project" ? "Project" : "User"}</th>
-              <th>Hours</th>
-              <th>Billable</th>
+              <th className="num">Hours</th>
+              <th className="num">Billable</th>
             </tr>
           </thead>
           <tbody>
@@ -149,16 +149,16 @@ export default function ReportsPage() {
                     {g.name}
                   </span>
                 </td>
-                <td>{hoursLabel(g.seconds)}</td>
-                <td>{formatDollars(g.billableCents)}</td>
+                <td className="num">{hoursLabel(g.seconds)}</td>
+                <td className="num">{formatDollars(g.billableCents)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
               <td className="strong">Total</td>
-              <td className="strong">{hoursLabel(result.totalSeconds)}</td>
-              <td className="strong">{formatDollars(grandTotalBillable)}</td>
+              <td className="strong num">{hoursLabel(result.totalSeconds)}</td>
+              <td className="strong num">{formatDollars(grandTotalBillable)}</td>
             </tr>
           </tfoot>
         </table>
