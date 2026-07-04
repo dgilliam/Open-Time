@@ -1,116 +1,128 @@
-# Open-Time — MVP Plan
+# Open-Time — Plan (v2)
 
 Owner: orchestrator model. Executors implement against this document and do
-not change it.
+not change it. v1 (projects, no auth, user picker) is superseded; this
+section is the source of truth.
 
-## Product
+## Product v2
 
-Time tracking for the RepoScout team, designed so the core can later become a
-multi-tenant SaaS. MVP is single-team, no auth: a user picker stands in for
-login, and every API call carries an explicit `userId` so real auth can be
-added without rewiring.
+Time tracking with exactly two concepts: **task** and **time**.
+No projects (may return later), no clients, no rates/billable, no tags.
 
-MVP capabilities:
-1. Start/stop a live timer against a project with a note.
-2. Add/edit/delete manual time entries.
-3. Manage projects (name, client, color, hourly rate, archive).
-4. Manage team members (name, email).
-5. Weekly timesheet view per user.
-6. Report: hours (and billable value) per project and per user over a date
-   range, with CSV export.
+- A **task** is a user-entered string `SLUG-description`, e.g.
+  `GM7VKNDN9Y3F-otp-resend-onboarding`. Tasks are entities: many time
+  entries attach to one task. When logging time, the user picks from an
+  autocomplete of tasks they have previously logged time to, or types a
+  new one (created implicitly on save).
+- A **time entry** is task + startedAt + stoppedAt. No note field — the
+  task string is the description. Durations are **rounded to the nearest
+  0.5h at save time** (minimum 0.5h), stored in `duration_secs`; raw
+  start/stop timestamps are preserved unmodified.
+- **Roles**: exactly one `admin` (Drew) and unlimited `member`s. Admin
+  sees everyone's calendars/reports and manages users. Members see only
+  their own data — enforced server-side, not just hidden in the UI.
+- **Auth**: email + password sessions. No self-registration; admin
+  creates users. First-run `/setup` creates the admin account when the
+  users table is empty.
+- **Calendar view** replaces the timesheet: month grid showing rounded
+  hours per day, plus a GitHub-contributions-style heatmap strip (last
+  ~12 months, color intensity = hours/day).
 
-Deliberately out of scope for MVP: auth, multi-team/tenancy, invoicing,
-integrations, mobile. The schema keeps these reachable (rates on projects,
-explicit user ids) but we build none of it now.
-
-### Positioning vs solidtime (product north star, 2026-07-04)
-
-solidtime is the closest existing product to what we want, but its
-hierarchy — Organization → Members → Clients → Projects → Tasks, with
-billable rates at four levels plus roles and approvals — is too heavy for
-the individual contributor. Open-Time deliberately flattens all of it:
-
-- No organization or client entities. A project's "client" is an optional
-  text label, nothing more. Never promote it to a table without an explicit
-  product decision.
-- No tasks. The free-text note on a time entry is the only sub-project
-  granularity.
-- One optional hourly rate, on the project. No member/org rate overrides.
-- The IC's entire daily surface is the Timer page: pick project, optionally
-  type a note, start. Two interactions, zero hierarchy.
-
-When in doubt, cut. Admin/SaaS features layer on later; IC simplicity is
-the moat and must never regress.
+IC surface: type/pick task → Start. One interaction.
 
 ## Stack
 
-- Next.js 15, App Router, TypeScript, `src/` directory. No Tailwind — plain
-  CSS in `src/app/globals.css` with CSS variables for theming.
-- SQLite via `better-sqlite3`, file at `data/opentime.db` (gitignored).
-  Schema applied idempotently in `src/lib/db.ts` (CREATE TABLE IF NOT EXISTS).
-- Vitest for tests, exercising the data layer directly against a temp DB.
+Unchanged: Next.js 15 App Router + TypeScript, better-sqlite3 at
+`data/opentime.db`, plain CSS design system (see Design system section),
+vitest. Password hashing via `node:crypto` scrypt (no new native deps).
+Session cookie `ot_session` (httpOnly, sameSite=lax), token stored hashed
+in `sessions` table, 30-day expiry.
 
-## Schema
+## Schema v2 (destructive reset — v1 tables dropped, seed data rebuilt)
 
 ```sql
 users(id TEXT PK, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','member')),
       created_at TEXT NOT NULL)
-projects(id TEXT PK, name TEXT NOT NULL, client TEXT, color TEXT NOT NULL,
-         hourly_rate_cents INTEGER, archived INTEGER NOT NULL DEFAULT 0,
-         created_at TEXT NOT NULL)
+sessions(token_hash TEXT PK, user_id TEXT NOT NULL REFERENCES users(id),
+         expires_at TEXT NOT NULL, created_at TEXT NOT NULL)
+tasks(id TEXT PK, name TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL)
 time_entries(id TEXT PK,
              user_id TEXT NOT NULL REFERENCES users(id),
-             project_id TEXT NOT NULL REFERENCES projects(id),
-             note TEXT NOT NULL DEFAULT '',
-             started_at TEXT NOT NULL,   -- ISO-8601 UTC
-             stopped_at TEXT,            -- NULL = timer running
+             task_id TEXT NOT NULL REFERENCES tasks(id),
+             started_at TEXT NOT NULL,          -- ISO-8601 UTC, raw
+             stopped_at TEXT,                   -- NULL = running
+             duration_secs INTEGER,             -- NULL while running; rounded on save
              created_at TEXT NOT NULL)
 ```
 
-IDs are `crypto.randomUUID()`. At most one running entry
-(`stopped_at IS NULL`) per user — starting a timer auto-stops any running one.
+Task name validation: trimmed, 3–120 chars, must match
+`^[A-Za-z0-9]+-[A-Za-z0-9][A-Za-z0-9-]*$` (slug, dash, kebab rest); the
+slug segment is uppercased on save, the rest lowercased. Reject with a
+helpful 400 otherwise.
 
-## API contract
+Rounding rule (applied on manual create/update and on timer stop):
+`duration_secs = max(1800, round(rawSeconds / 1800) * 1800)`.
+Calendar, reports, and entry lists always display from `duration_secs`.
+At most one running entry per user; starting a timer auto-stops (and
+rounds) any running one.
 
-All under `/api`. Success: `{ "data": ... }`. Error: `{ "error": "msg" }`
-with 400/404/409. Executors implement exactly these routes:
+## API contract v2
+
+Success `{ data }`, error `{ error }` with 400/401/403/404/409.
+Every route except `/api/auth/*` and `/api/setup` requires a valid
+session. "Self or admin" = members may only target themselves; admins may
+target anyone via `userId` param.
 
 | Method & path | Behavior |
 |---|---|
-| GET `/api/users` | list users |
-| POST `/api/users` | create `{name, email}` |
-| GET `/api/projects?includeArchived=1` | list projects (default: active only) |
-| POST `/api/projects` | create `{name, client?, color?, hourlyRateCents?}` |
-| PATCH `/api/projects/[id]` | partial update incl. `archived` |
-| GET `/api/entries?userId=&from=&to=` | list entries, newest first; `from`/`to` ISO dates filter on `started_at` |
-| POST `/api/entries` | create manual entry `{userId, projectId, note?, startedAt, stoppedAt}` (both times required, stoppedAt > startedAt) |
-| PATCH `/api/entries/[id]` | partial update of note/projectId/startedAt/stoppedAt |
-| DELETE `/api/entries/[id]` | delete |
-| GET `/api/timer?userId=` | running entry or `{ data: null }` |
-| POST `/api/timer/start` | `{userId, projectId, note?}`; auto-stops any running entry for that user |
-| POST `/api/timer/stop` | `{userId}`; 409 if nothing running |
-| GET `/api/reports?from=&to=&groupBy=project\|user` | `{ groups: [{id, name, seconds, billableCents}], totalSeconds }` (billableCents null when no rate) |
-| GET `/api/reports/csv?from=&to=` | CSV download of entries in range |
+| GET `/api/setup` | `{ needed: boolean }` (true when zero users) |
+| POST `/api/setup` | create admin `{name,email,password}`; 409 if users exist |
+| POST `/api/auth/login` | `{email,password}` → sets session cookie, returns user (sans hash) |
+| POST `/api/auth/logout` | clears session |
+| GET `/api/auth/me` | current user or `{ data: null }` |
+| GET `/api/users` | admin only: list users |
+| POST `/api/users` | admin only: create member `{name,email,password}` |
+| GET `/api/tasks?q=` | tasks the CURRENT user has logged time to, filtered by substring, most recently used first, limit 20 |
+| GET `/api/entries?userId=&from=&to=` | self or admin; newest first |
+| POST `/api/entries` | `{task, startedAt, stoppedAt}` for SELF; find-or-create task; validates + rounds |
+| PATCH `/api/entries/[id]` | owner or admin; `{task?, startedAt?, stoppedAt?}`; re-rounds |
+| DELETE `/api/entries/[id]` | owner or admin |
+| GET `/api/timer` | self: running entry or null |
+| POST `/api/timer/start` | `{task}` for self; find-or-create task; auto-stop rule |
+| POST `/api/timer/stop` | self; 409 if nothing running; rounds |
+| GET `/api/calendar?userId=&from=&to=` | self or admin: `[{date: 'YYYY-MM-DD', hours}]` (local-date bucketing by started_at, hours from duration_secs) |
+| GET `/api/reports?userId=&from=&to=&groupBy=task\|user` | groupBy=task: self or admin-targeted user. groupBy=user: admin only. `{groups:[{id,name,hours}], totalHours}` |
 
-Entry objects are returned with joined `projectName`, `projectColor`,
-`userName` so the UI never needs client-side joins.
+Entries are returned with joined `taskName` (and `userName` for admin
+queries). Auth helper `requireUser(req)` / `requireAdmin(req)` in
+`src/lib/auth.ts`; route handlers stay thin.
 
-## Pages
+## Pages v2
 
-- `/` Timer + today: user picker (persisted in localStorage), big
-  start/stop timer with project select + note, list of today's entries with
-  inline edit/delete.
-- `/timesheet` Week grid for the selected user: days × projects, cell totals,
-  week navigation.
-- `/projects` CRUD + archive toggle, color dot, rate.
-- `/reports` Date-range presets (this week, last week, this month), group by
-  project/user, totals table with billable value, CSV export button.
-- Shared layout with left nav, RepoScout-neutral styling: system font stack,
-  one accent color `#4f46e5`, light/dark via `prefers-color-scheme`.
-- Team members are created via an "Add teammate" dialog on the nav's user
-  picker (name + email only — no roles, no user management page). This is
-  the entire team-management surface; do not grow it without a product
-  decision.
+- `/login` — email + password, error inline. Redirects to `/` when
+  already signed in. `/setup` — shown only when no users exist (server
+  checks); creates admin then signs in.
+- `/` Timer + today: task combobox (autocomplete from `/api/tasks?q=`,
+  free text allowed, monospace styling for the slug), Start/Stop hero,
+  today's completed entries (task, start–stop, rounded duration,
+  edit/delete).
+- `/calendar` — month grid (Mon–Sun columns), each day cell shows rounded
+  hours (e.g. `6.5h`) with a subtle background tint scaled by hours;
+  month prev/next/today nav. Below: GitHub-style heatmap of the last 12
+  months (weeks as columns, 5 intensity buckets: 0, <2, 2–4, 4–6, 6+ h),
+  with weekday labels and month labels, tooltip `date — Xh`. Admin only:
+  a person selector above the calendar; members see only themselves.
+- `/reports` — presets (This week, Last week, This month) + custom range;
+  table of hours by task for the viewed user; admin can switch person or
+  group by user. Hours only — no billable column. CSV export dropped for
+  now (no consumer identified); revisit on request.
+- `/team` — admin only: user list (name, email, role) + "Add member"
+  dialog (name, email, temp password). Members never see this page.
+- Nav: Timer, Calendar, Reports (+ Team for admin). Bottom of nav: signed-
+  in user's name + Sign out. No user toggling outside admin data views.
+
+Design system unchanged (see below). The heatmap uses the accent scale.
 
 ## Design system (v2 restyle, 2026-07-04)
 
@@ -125,34 +137,37 @@ colors can be swapped in one place later.
   `#e5e7eb`, text `#111827`, muted `#6b7280`.
 - Neutrals (dark): page `#101010`, surface `#171717`, border `#2e2e2e`,
   text `#f3f4f6`, muted `#9ca3af`.
-- Accent `--accent: #4f46e5` — used only for the active nav item, the
-  running-timer highlight, and focus details. Placeholder until RepoScout
-  brand hexes are provided.
-- Buttons (cal.com-style): 6px radius, 500 weight, 36px height.
-  Primary: solid `#111827` with white text (dark mode: white with black
-  text), hover one step lighter/darker. Secondary: surface bg, 1px border,
-  hover subtle-surface. Danger: `#dc2626` solid. `:focus-visible` gets a
-  2px offset ring.
-- Inputs/selects: 1px border, 6px radius, same height as buttons, focus
-  border-color darkens + subtle ring. Labels 13px medium, muted.
-- Surfaces: cards/sections are surface bg + 1px border + 8px radius, no
-  heavy shadows. Tables: 1px row separators, 12px uppercase muted headers.
-- Nav: subtle-surface sidebar with 1px right border; active link is a
-  soft pill (subtle bg + full-strength text), not a colored underline.
+- Accent `--accent: #4f46e5` — active nav, running-timer highlight, focus
+  details, heatmap scale. Placeholder until RepoScout brand hexes arrive.
+- Buttons: 6px radius, 500 weight, 36px height. Primary near-black solid
+  (inverts in dark mode); secondary bordered; danger `#dc2626`; btn-link.
+  `:focus-visible` 2px offset ring.
+- Inputs/selects: 1px border, 6px radius, button height, focus ring.
+- Surfaces: 1px border, 8px radius cards; tables with 12px uppercase
+  muted headers, 1px separators, right-aligned tabular-nums numerics.
+- Nav: subtle-surface sidebar, 1px right border, soft-pill links.
 
-## Task breakdown (sequential Sonnet executor runs)
+## Task breakdown (sequential executor runs)
 
-1. **T1 — Scaffold + data layer + API.** Full Next.js scaffold (manual
-   package.json, no create-next-app), `src/lib/db.ts`, `src/lib/repo.ts`
-   (all queries), every API route above, `scripts/seed.ts` (3 users, 4
-   projects, two weeks of plausible entries), `.gitignore`, vitest setup with
-   data-layer tests. Done = `npm run build` passes, `npm test` passes.
-2. **T2 — UI.** All four pages + layout against the API contract, fetch via a
-   tiny typed client in `src/lib/api.ts`. Done = `npm run build` passes and
-   pages render against seeded data.
-3. **T3 — Polish + docs.** README rewrite (setup, commands, architecture,
-   SaaS roadmap note), empty states, error toasts, loading states. Done =
-   build + tests pass.
-
-Orchestrator reviews the diff after each task and does final end-to-end
-review (seed, run, exercise API) before commit.
+1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old
+   `projects` table exists — dev-only destructive migration), auth
+   (`src/lib/auth.ts`: scrypt hash/verify, session create/lookup/delete,
+   cookie helpers), rewrite `src/lib/repo.ts` for tasks/entries/rounding,
+   all API routes v2 (delete project routes), seed v2 (admin
+   drew@gilli.am / password `opentime-dev`, 3 members password
+   `password123`, ~30 tasks in slug format, 10 weeks of entries with
+   realistic density incl. empty days), rewrite tests: rounding math,
+   task find-or-create + validation + per-user autocomplete scoping,
+   auth (hash/verify, session expiry), authorization (member cannot read
+   another user's entries), calendar bucketing. Old UI pages may 500
+   against the new API — acceptable; T6 follows immediately. Done =
+   build passes, tests pass.
+2. **T6 — UI v2.** Login/setup pages, session-aware nav (name + sign
+   out, Team link for admin), timer with task combobox, calendar page
+   (month grid + heatmap), reports rework, team page, delete projects
+   page and dead components/api-client methods. Done = build + tests
+   pass, Playwright walkthrough: login as admin, start/stop timer,
+   calendar renders with heatmap, member login sees only self, member
+   hitting another userId gets 403.
+3. **T7 — Review & polish.** Orchestrator end-to-end review; README
+   update (auth model, task format, roles); small fixes.
