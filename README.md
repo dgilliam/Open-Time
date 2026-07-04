@@ -18,8 +18,8 @@ npm run seed   # creates/resets data/opentime.db with sample users, projects, en
 npm run dev    # http://localhost:3000
 ```
 
-There's no login: pick a team member from the user picker in the top nav.
-The MVP has no UI for creating users — see "Roadmap" below.
+There's no login: pick a team member from the user picker in the top nav,
+or create one with "Add teammate" in the nav.
 
 ## Commands
 

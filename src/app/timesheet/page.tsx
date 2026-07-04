@@ -25,10 +25,6 @@ export default function TimesheetPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    document.title = "Open-Time — Timesheet";
-  }, []);
-
   const load = useCallback(() => {
     if (!userId) {
       setEntries([]);
@@ -89,7 +85,7 @@ export default function TimesheetPage() {
     return (
       <p className="muted">
         {users.length === 0
-          ? "No team members yet. Add one via POST /api/users to get started."
+          ? "No team members yet. Use “Add teammate” in the nav to create one."
           : "Pick a user from the top nav to get started."}
       </p>
     );

@@ -4,7 +4,10 @@ import { UserProvider } from "@/components/UserContext";
 import { NavBar } from "@/components/NavBar";
 
 export const metadata: Metadata = {
-  title: "Open-Time",
+  title: {
+    template: "Open-Time — %s",
+    default: "Open-Time — Timer", // the root page is the Timer
+  },
   description: "Team time tracking for RepoScout",
 };
 

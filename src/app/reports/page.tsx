@@ -55,10 +55,6 @@ export default function ReportsPage() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    document.title = "Open-Time — Reports";
-  }, []);
-
   const colorByProjectId = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of projects) map.set(p.id, p.color);
