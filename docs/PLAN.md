@@ -112,6 +112,34 @@ Entry objects are returned with joined `projectName`, `projectColor`,
   the entire team-management surface; do not grow it without a product
   decision.
 
+## Design system (v2 restyle, 2026-07-04)
+
+Written from scratch in our own CSS, visually inspired by cal.com's design
+language (their code is AGPL — never copy styles from their repo). All
+tokens are CSS variables in `:root` / dark override so RepoScout brand
+colors can be swapped in one place later.
+
+- Typeface: `Inter, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+  sans-serif` (no webfont download; Inter used when locally installed).
+- Neutrals (light): page `#ffffff`, subtle surface `#f9fafb`, border
+  `#e5e7eb`, text `#111827`, muted `#6b7280`.
+- Neutrals (dark): page `#101010`, surface `#171717`, border `#2e2e2e`,
+  text `#f3f4f6`, muted `#9ca3af`.
+- Accent `--accent: #4f46e5` — used only for the active nav item, the
+  running-timer highlight, and focus details. Placeholder until RepoScout
+  brand hexes are provided.
+- Buttons (cal.com-style): 6px radius, 500 weight, 36px height.
+  Primary: solid `#111827` with white text (dark mode: white with black
+  text), hover one step lighter/darker. Secondary: surface bg, 1px border,
+  hover subtle-surface. Danger: `#dc2626` solid. `:focus-visible` gets a
+  2px offset ring.
+- Inputs/selects: 1px border, 6px radius, same height as buttons, focus
+  border-color darkens + subtle ring. Labels 13px medium, muted.
+- Surfaces: cards/sections are surface bg + 1px border + 8px radius, no
+  heavy shadows. Tables: 1px row separators, 12px uppercase muted headers.
+- Nav: subtle-surface sidebar with 1px right border; active link is a
+  soft pill (subtle bg + full-strength text), not a colored underline.
+
 ## Task breakdown (sequential Sonnet executor runs)
 
 1. **T1 — Scaffold + data layer + API.** Full Next.js scaffold (manual
