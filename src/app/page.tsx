@@ -10,11 +10,15 @@ import { EntryList } from "@/components/EntryList";
 import { addDays, startOfDay } from "@/lib/format";
 
 export default function Home() {
-  const { userId, user, loading: userLoading } = useUser();
+  const { users, userId, user, loading: userLoading } = useUser();
   const [projects, setProjects] = useState<Project[]>([]);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = "Open-Time — Timer";
+  }, []);
 
   const load = useCallback(() => {
     if (!userId) {
@@ -47,7 +51,13 @@ export default function Home() {
   }
 
   if (!userId) {
-    return <p className="muted">Pick a user from the top nav to get started.</p>;
+    return (
+      <p className="muted">
+        {users.length === 0
+          ? "No team members yet. Add one via POST /api/users to get started."
+          : "Pick a user from the top nav to get started."}
+      </p>
+    );
   }
 
   // The currently-running entry is shown live in the timer bar above; avoid

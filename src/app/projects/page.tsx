@@ -38,6 +38,10 @@ export default function ProjectsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    document.title = "Open-Time — Projects";
+  }, []);
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setCreating(true);

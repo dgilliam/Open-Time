@@ -50,7 +50,7 @@ export function EntryDialog({
   }
 
   return (
-    <Dialog title="Edit entry" onClose={onClose}>
+    <Dialog title="Edit entry" onClose={saving ? () => {} : onClose}>
       <form onSubmit={handleSubmit} className="form">
         {error && <p className="error-text">{error}</p>}
         <label>
@@ -87,7 +87,7 @@ export function EntryDialog({
           />
         </label>
         <div className="dialog-actions">
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={saving}>

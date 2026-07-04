@@ -47,7 +47,7 @@ export function ProjectDialog({
   }
 
   return (
-    <Dialog title="Edit project" onClose={onClose}>
+    <Dialog title="Edit project" onClose={saving ? () => {} : onClose}>
       <form onSubmit={handleSubmit} className="form">
         {error && <p className="error-text">{error}</p>}
         <label>
@@ -74,7 +74,7 @@ export function ProjectDialog({
           />
         </label>
         <div className="dialog-actions">
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={saving}>
