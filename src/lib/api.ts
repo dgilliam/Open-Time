@@ -141,4 +141,10 @@ export function getReport(opts: {
   return request<ReportResult>(`/api/reports?${params.toString()}`);
 }
 
+// ---------- timesheet ----------
+
+export function setTimesheetCell(input: { task: string; date: string; hours: number }): Promise<{ hours: number }> {
+  return request<{ hours: number }>("/api/timesheet/cell", { method: "PUT", body: JSON.stringify(input) });
+}
+
 export { ApiError };

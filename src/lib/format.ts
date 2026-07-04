@@ -123,3 +123,45 @@ export function parseLocalDate(value: string): Date {
 export function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
+
+/** Returns the Sunday (local time, midnight) of the week containing `date` — used only by the Sun-first timesheet grid. */
+export function startOfWeekSun(date: Date): Date {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+}
+
+/** ISO-8601 week number (1-53) of the Monday-based week containing `date`. */
+export function isoWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7; // Mon=1 .. Sun=7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+/**
+ * Format seconds as "Xh YYmin" (e.g. "3h 00min"). Used only on the weekly
+ * timesheet grid — the rest of the app keeps decimal hours (see hoursLabel).
+ */
+export function formatHoursMinutes(totalSeconds: number): string {
+  const totalMinutes = Math.max(0, Math.round(totalSeconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${String(minutes).padStart(2, "0")}min`;
+}
+
+/**
+ * Compact display for a report task-group's worked dates: listed when there
+ * are 3 or fewer ("Jul 1, Jul 2"), otherwise a range + count
+ * ("Jun 29 – Jul 4 · 5 days").
+ */
+export function formatReportDates(dates: string[]): string {
+  if (dates.length === 0) return "—";
+  if (dates.length <= 3) {
+    return dates.map((d) => formatShortDate(parseLocalDate(d))).join(", ");
+  }
+  const first = formatShortDate(parseLocalDate(dates[0]));
+  const last = formatShortDate(parseLocalDate(dates[dates.length - 1]));
+  return `${first} – ${last} · ${dates.length} days`;
+}

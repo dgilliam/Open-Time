@@ -8,6 +8,7 @@ import { getReport, listUsers } from "@/lib/api";
 import {
   addDays,
   dateInputValue,
+  formatReportDates,
   hoursLabel,
   parseLocalDate,
   startOfMonth,
@@ -137,6 +138,7 @@ export default function ReportsPage() {
             <thead>
               <tr>
                 <th>{groupBy === "task" ? "Task" : "User"}</th>
+                {groupBy === "task" && <th>Dates</th>}
                 <th className="num">Hours</th>
               </tr>
             </thead>
@@ -144,12 +146,13 @@ export default function ReportsPage() {
               {result.groups.map((g) => (
                 <tr key={g.id}>
                   <td className={groupBy === "task" ? "mono" : undefined}>{g.name}</td>
+                  {groupBy === "task" && <td className="muted">{formatReportDates(g.dates)}</td>}
                   <td className="num">{hoursLabel(g.hours * 3600)}</td>
                 </tr>
               ))}
               {result.groups.length === 0 && (
                 <tr>
-                  <td colSpan={2} className="muted">
+                  <td colSpan={groupBy === "task" ? 3 : 2} className="muted">
                     No entries in this range.
                   </td>
                 </tr>
@@ -158,6 +161,7 @@ export default function ReportsPage() {
             <tfoot>
               <tr>
                 <td>Total</td>
+                {groupBy === "task" && <td></td>}
                 <td className="num">{hoursLabel(result.totalHours * 3600)}</td>
               </tr>
             </tfoot>

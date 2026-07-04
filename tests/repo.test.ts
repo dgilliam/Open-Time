@@ -488,6 +488,217 @@ describe("report", () => {
   });
 });
 
+describe("report — dates + recency sort (v2.1)", () => {
+  it("attaches distinct ascending local dates and lastWorked per task group", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab27-multi-day",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab27-multi-day",
+      startedAt: "2026-01-03T09:00:00.000Z",
+      stoppedAt: "2026-01-03T10:00:00.000Z",
+    });
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab27-multi-day",
+      startedAt: "2026-01-02T09:00:00.000Z",
+      stoppedAt: "2026-01-02T10:00:00.000Z",
+    });
+
+    const result = repo.report({ userId: userA.id, groupBy: "task" });
+    const group = result.groups.find((g) => g.name === "AB27-multi-day")!;
+    expect(group.dates).toEqual(["2026-01-01", "2026-01-02", "2026-01-03"]);
+    expect(group.lastWorked).toBe("2026-01-03");
+  });
+
+  it("sorts all groups by most recent activity desc, regardless of total hours", () => {
+    // Task alpha: 5 hours total, but last worked earlier.
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab28-alpha-big",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T14:00:00.000Z",
+    });
+    // Task beta: only 0.5h, but worked most recently.
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab29-beta-small",
+      startedAt: "2026-01-05T09:00:00.000Z",
+      stoppedAt: "2026-01-05T09:30:00.000Z",
+    });
+
+    const result = repo.report({ userId: userA.id, groupBy: "task" });
+    expect(result.groups.map((g) => g.name)).toEqual(["AB29-beta-small", "AB28-alpha-big"]);
+  });
+
+  it("sorts user groups by most recent activity desc too", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab30-a-early",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T15:00:00.000Z", // 6h, but earlier
+    });
+    repo.createEntry({
+      userId: userB.id,
+      task: "ab31-b-late",
+      startedAt: "2026-01-05T09:00:00.000Z",
+      stoppedAt: "2026-01-05T09:30:00.000Z", // 0.5h, but most recent
+    });
+
+    const result = repo.report({ groupBy: "user" });
+    expect(result.groups.map((g) => g.id)).toEqual([userB.id, userA.id]);
+  });
+});
+
+describe("setTimesheetCell", () => {
+  it("creates a synthetic 09:00-local entry for a fresh cell", () => {
+    const result = repo.setTimesheetCell({
+      userId: userA.id,
+      task: "ab32-timesheet-new",
+      date: "2026-01-06",
+      hours: 3,
+    });
+    expect(result.hours).toBe(3);
+
+    const entries = repo
+      .listEntries({ userId: userA.id })
+      .filter((e) => e.taskName === "AB32-timesheet-new");
+    expect(entries.length).toBe(1);
+    expect(entries[0].durationSecs).toBe(3 * 3600);
+    const started = new Date(entries[0].startedAt);
+    expect(started.getHours()).toBe(9);
+    expect(started.getMinutes()).toBe(0);
+  });
+
+  it("rounds hours to the nearest 0.5h step", () => {
+    const result = repo.setTimesheetCell({
+      userId: userA.id,
+      task: "ab33-timesheet-round",
+      date: "2026-01-06",
+      hours: 3.2,
+    });
+    expect(result.hours).toBe(3);
+  });
+
+  it("replaces multiple existing completed entries for that task+day with a single one", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab34-timesheet-multi",
+      startedAt: "2026-01-06T09:00:00.000Z",
+      stoppedAt: "2026-01-06T10:00:00.000Z",
+    });
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab34-timesheet-multi",
+      startedAt: "2026-01-06T14:00:00.000Z",
+      stoppedAt: "2026-01-06T15:00:00.000Z",
+    });
+    // a different day for the same task must be left alone
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab34-timesheet-multi",
+      startedAt: "2026-01-07T09:00:00.000Z",
+      stoppedAt: "2026-01-07T10:00:00.000Z",
+    });
+
+    const result = repo.setTimesheetCell({
+      userId: userA.id,
+      task: "ab34-timesheet-multi",
+      date: "2026-01-06",
+      hours: 2.5,
+    });
+    expect(result.hours).toBe(2.5);
+
+    const entries = repo
+      .listEntries({ userId: userA.id })
+      .filter((e) => e.taskName === "AB34-timesheet-multi");
+    expect(entries.length).toBe(2); // the untouched other-day entry + the new single one
+    const jan6 = entries.filter((e) => e.startedAt.startsWith("2026-01-06"));
+    expect(jan6.length).toBe(1);
+    expect(jan6[0].durationSecs).toBe(2.5 * 3600);
+    const jan7 = entries.find((e) => e.startedAt.startsWith("2026-01-07"));
+    expect(jan7).toBeTruthy();
+  });
+
+  it("clears a cell (deletes entries, inserts nothing) when hours is 0", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab35-timesheet-clear",
+      startedAt: "2026-01-06T09:00:00.000Z",
+      stoppedAt: "2026-01-06T10:00:00.000Z",
+    });
+
+    const result = repo.setTimesheetCell({
+      userId: userA.id,
+      task: "ab35-timesheet-clear",
+      date: "2026-01-06",
+      hours: 0,
+    });
+    expect(result.hours).toBe(0);
+
+    const entries = repo
+      .listEntries({ userId: userA.id })
+      .filter((e) => e.taskName === "AB35-timesheet-clear");
+    expect(entries.length).toBe(0);
+  });
+
+  it("never touches or counts a running entry for the same task+day", () => {
+    const running = repo.startTimer({ userId: userA.id, task: "ab36-timesheet-running" });
+
+    const result = repo.setTimesheetCell({
+      userId: userA.id,
+      task: "ab36-timesheet-running",
+      date: new Date(running.startedAt).toISOString().slice(0, 10),
+      hours: 2,
+    });
+    expect(result.hours).toBe(2);
+
+    // The running entry must still be running, untouched by the replace.
+    const stillRunning = repo.getRunningEntry(userA.id);
+    expect(stillRunning?.id).toBe(running.id);
+    expect(stillRunning?.stoppedAt).toBeNull();
+
+    const completed = repo
+      .listEntries({ userId: userA.id })
+      .filter((e) => e.taskName === "AB36-timesheet-running" && e.stoppedAt !== null);
+    expect(completed.length).toBe(1);
+    expect(completed[0].durationSecs).toBe(2 * 3600);
+  });
+
+  it("rejects negative hours", () => {
+    expectApiError(
+      () => repo.setTimesheetCell({ userId: userA.id, task: "ab37-neg", date: "2026-01-06", hours: -1 }),
+      400
+    );
+  });
+
+  it("rejects hours over 24", () => {
+    expectApiError(
+      () => repo.setTimesheetCell({ userId: userA.id, task: "ab38-over", date: "2026-01-06", hours: 25 }),
+      400
+    );
+  });
+
+  it("rejects a malformed task name", () => {
+    expectApiError(
+      () =>
+        repo.setTimesheetCell({ userId: userA.id, task: "not a valid task", date: "2026-01-06", hours: 2 }),
+      400
+    );
+  });
+
+  it("rejects a malformed date", () => {
+    expectApiError(
+      () => repo.setTimesheetCell({ userId: userA.id, task: "ab39-bad-date", date: "01/06/2026", hours: 2 }),
+      400
+    );
+  });
+});
+
 describe("auth", () => {
   it("hashes and verifies a correct password", () => {
     const hash = auth.hashPassword("correct horse battery staple");

@@ -12,6 +12,7 @@ import { useSession } from "./SessionContext";
 
 const BASE_LINKS = [
   { href: "/", label: "Timer" },
+  { href: "/timesheet", label: "Timesheet" },
   { href: "/calendar", label: "Calendar" },
   { href: "/reports", label: "Reports" },
 ];

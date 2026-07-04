@@ -381,42 +381,123 @@ export function report(opts: {
     id: string;
     name: string;
     secs: number;
+    dates: Set<string>;
   }
   const groups = new Map<string, Acc>();
   let totalSecs = 0;
+
+  function addToGroup(key: string, name: string, secs: number, dateKey: string): void {
+    totalSecs += secs;
+    let acc = groups.get(key);
+    if (!acc) {
+      acc = { id: key, name, secs: 0, dates: new Set() };
+      groups.set(key, acc);
+    }
+    acc.secs += secs;
+    acc.dates.add(dateKey);
+  }
 
   if (opts.groupBy === "task") {
     const entries = listEntries({ userId: opts.userId, from: opts.from, to: opts.to }).filter(
       (e) => e.durationSecs !== null
     );
     for (const e of entries) {
-      const secs = e.durationSecs as number;
-      totalSecs += secs;
-      let acc = groups.get(e.taskId);
-      if (!acc) {
-        acc = { id: e.taskId, name: e.taskName, secs: 0 };
-        groups.set(e.taskId, acc);
-      }
-      acc.secs += secs;
+      addToGroup(e.taskId, e.taskName, e.durationSecs as number, localDateKey(e.startedAt));
     }
   } else {
     // groupBy === "user": admin overview across everyone in range (userId filter ignored).
     const entries = listEntries({ from: opts.from, to: opts.to }).filter((e) => e.durationSecs !== null);
     for (const e of entries) {
-      const secs = e.durationSecs as number;
-      totalSecs += secs;
-      let acc = groups.get(e.userId);
-      if (!acc) {
-        acc = { id: e.userId, name: e.userName, secs: 0 };
-        groups.set(e.userId, acc);
-      }
-      acc.secs += secs;
+      addToGroup(e.userId, e.userName, e.durationSecs as number, localDateKey(e.startedAt));
     }
   }
 
+  // All groupings sort by most recent activity desc (ties broken by hours desc).
   const result = Array.from(groups.values())
-    .sort((a, b) => b.secs - a.secs)
-    .map((acc) => ({ id: acc.id, name: acc.name, hours: acc.secs / 3600 }));
+    .map((acc) => {
+      const dates = Array.from(acc.dates).sort();
+      return {
+        id: acc.id,
+        name: acc.name,
+        hours: acc.secs / 3600,
+        dates,
+        lastWorked: dates[dates.length - 1],
+      };
+    })
+    .sort((a, b) => {
+      if (a.lastWorked !== b.lastWorked) return a.lastWorked < b.lastWorked ? 1 : -1;
+      return b.hours - a.hours;
+    });
 
   return { groups: result, totalHours: totalSecs / 3600 };
+}
+
+// ---------- timesheet ----------
+
+const TIMESHEET_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Replaces a single user's COMPLETED entries for one task+local-date with (at
+ * most) one synthetic entry starting at 09:00 local that day. Running entries
+ * are never selected by this query (stopped_at IS NOT NULL), so they're
+ * untouched and never counted. hours <= 0 deletes without inserting.
+ */
+export function setTimesheetCell(input: {
+  userId: string;
+  task: string;
+  date: string;
+  hours: number;
+}): { hours: number } {
+  if (!input.userId) throw new ApiError(400, "userId is required");
+  if (typeof input.hours !== "number" || !Number.isFinite(input.hours)) {
+    throw new ApiError(400, "hours must be a number");
+  }
+  if (input.hours < 0 || input.hours > 24) {
+    throw new ApiError(400, "hours must be between 0 and 24");
+  }
+  if (!TIMESHEET_DATE_RE.test(input.date || "")) {
+    throw new ApiError(400, "date must be in YYYY-MM-DD format");
+  }
+
+  // Validates + normalizes the task name (throws 400 on bad format) without
+  // creating a task just to immediately clear a cell that never had one.
+  const taskName = normalizeTaskName(input.task);
+
+  const txn = db.transaction((): { hours: number } => {
+    const existingTaskRow = db.prepare("SELECT id FROM tasks WHERE name = ?").get(taskName) as
+      | { id: string }
+      | undefined;
+
+    if (existingTaskRow) {
+      const rows = db
+        .prepare(
+          `SELECT id, started_at FROM time_entries
+           WHERE user_id = ? AND task_id = ? AND stopped_at IS NOT NULL`
+        )
+        .all(input.userId, existingTaskRow.id) as { id: string; started_at: string }[];
+      for (const row of rows) {
+        if (localDateKey(row.started_at) === input.date) {
+          db.prepare("DELETE FROM time_entries WHERE id = ?").run(row.id);
+        }
+      }
+    }
+
+    if (input.hours <= 0) return { hours: 0 };
+
+    const task = existingTaskRow ?? findOrCreateTask(input.task);
+    const durationSecs = roundDurationSecs(input.hours * 3600);
+    const [y, m, d] = input.date.split("-").map(Number);
+    const startedAt = new Date(y, m - 1, d, 9, 0, 0, 0);
+    const stoppedAt = new Date(startedAt.getTime() + durationSecs * 1000);
+    const id = randomUUID();
+    const createdAt = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO time_entries (id, user_id, task_id, started_at, stopped_at, duration_secs, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, input.userId, task.id, startedAt.toISOString(), stoppedAt.toISOString(), durationSecs, createdAt);
+
+    return { hours: durationSecs / 3600 };
+  });
+
+  return txn();
 }
