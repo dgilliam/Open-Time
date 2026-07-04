@@ -2,24 +2,49 @@
 
 Minimal team time tracking for the RepoScout team.
 
-Open-Time deliberately skips the hierarchy most time trackers pile on
-(organizations, clients, tasks, roles, approvals). A project's "client" is
-just an optional label. There are no tasks — a free-text note is the only
-sub-project granularity. The entire daily surface for an individual
-contributor is the Timer page: pick a project, optionally type a note,
-start. Two interactions, zero hierarchy. See `docs/PLAN.md` for the full
+Two concepts only: **tasks** and **time**. No projects, clients, tags,
+tasks-within-tasks, or billable rates. A task is a string like
+`GM7VKNDN9Y3F-otp-resend-onboarding` (slug, dash, kebab description);
+entries attach to tasks, and durations round to the nearest half hour
+when saved. The individual contributor's entire surface is the Timer
+page: type or pick a task, hit Start. See `docs/PLAN.md` for the full
 rationale and API contract.
 
 ## Quickstart
 
 ```bash
 npm install
-npm run seed   # creates/resets data/opentime.db with sample users, projects, entries
+npm run seed   # resets data/opentime.db with a sample team + 10 weeks of entries
 npm run dev    # http://localhost:3000
 ```
 
-There's no login: pick a team member from the user picker in the top nav,
-or create one with "Add teammate" in the nav.
+Seeded logins:
+
+| Who | Email | Password |
+|---|---|---|
+| Admin | `drew@gilli.am` | `opentime-dev` |
+| Members | `ada@reposcout.dev`, `grace@reposcout.dev`, `alan@reposcout.dev` | `password123` |
+
+On an empty database (no seed), the app walks you through `/setup` to
+create the admin account. Admins create members from the Team page —
+there is no self-registration.
+
+## Roles
+
+- **Admin** (exactly one): sees every member's calendar and reports,
+  manages the team.
+- **Member**: sees only their own data. Enforced server-side — API
+  requests for another user's data return 403 regardless of UI.
+
+## Pages
+
+- **Timer** — task autocomplete (your previously used tasks), start/stop,
+  today's entries.
+- **Calendar** — month grid with rounded hours per day, plus a
+  GitHub-style 12-month activity heatmap.
+- **Reports** — hours by task over a date range; admin can view any
+  member or group by user.
+- **Team** (admin) — member list + add member.
 
 ## Commands
 
@@ -28,41 +53,32 @@ or create one with "Add teammate" in the nav.
 | `npm run dev` | Dev server on `:3000` |
 | `npm run build` | Production build (must pass before any commit) |
 | `npm start` | Run the production build |
-| `npm test` | Data-layer tests (Vitest) |
+| `npm test` | Data-layer + authorization tests (Vitest) |
 | `npm run seed` | Reset and re-seed the local SQLite database |
 
 ## Architecture
 
-- **Next.js 15, App Router, TypeScript.** Four pages under `src/app`
-  (`/` Timer, `/timesheet`, `/projects`, `/reports`), each a client
-  component that talks to the API through the small typed client in
-  `src/lib/api.ts`. Styling is plain CSS with theme variables in
-  `src/app/globals.css` — no Tailwind, light/dark via
-  `prefers-color-scheme`.
-- **SQLite via `better-sqlite3`.** The database file lives at
-  `data/opentime.db` (gitignored, created on demand). Schema is applied
-  idempotently at startup in `src/lib/db.ts`; all queries live in
+- **Next.js 15, App Router, TypeScript.** Client pages behind a session
+  gate (`AppShell`), talking to the API through the typed client in
+  `src/lib/api.ts`. Plain CSS design system in `src/app/globals.css`
+  (cal.com-inspired tokens, light/dark via `prefers-color-scheme`).
+- **SQLite via `better-sqlite3`** at `data/opentime.db` (gitignored).
+  Schema applied idempotently in `src/lib/db.ts`; queries in
   `src/lib/repo.ts`.
-- **API shape.** Every route under `src/app/api/**` returns
-  `{ "data": ... }` on success or `{ "error": "message" }` with a 400/404/409
-  status on failure. The user picker stands in for auth: every call carries
-  an explicit `userId` so real authentication can be layered in later
-  without changing the shape of anything. Full route-by-route contract is
-  in `docs/PLAN.md`.
-- **Tests.** Vitest exercises `src/lib/repo.ts` directly against a temporary
-  SQLite file — no HTTP layer in the test path.
+- **Auth**: email + password (scrypt via `node:crypto`), httpOnly session
+  cookie whose token is stored only as a SHA-256 hash. Route guards in
+  `src/lib/auth.ts`. Note: the session cookie should gain `secure: true`
+  when deployed behind HTTPS.
+- **API shape**: `{ "data": ... }` on success, `{ "error": "message" }`
+  with 400/401/403/404/409 on failure. Full contract in `docs/PLAN.md`.
+- **Rounding**: `duration_secs = max(0.5h, nearest 0.5h)` computed at
+  save; raw start/stop timestamps are preserved, so the rounding policy
+  can change later without data loss.
 
 ## Roadmap: SaaS-ready, not SaaS
 
-The MVP is intentionally single-team with no auth, but the schema keeps a
-multi-tenant SaaS path open rather than closing it off:
-
-- Every API call already takes an explicit `userId` — swapping the user
-  picker for real sessions/auth doesn't require touching the data layer.
-- Hourly rates live on the project, not scattered across
-  org/member/client levels — this is the one rate concept, and it's ready
-  to be the input to an invoicing layer later.
-- Auth, multi-tenancy, and invoicing are explicitly out of scope for now.
-  When they're built, the goal is to add them alongside the current model,
-  not restructure it — the individual-contributor simplicity of the Timer
-  page must not regress.
+Multi-tenancy, invoicing, and integrations are out of scope for now. The
+data model keeps the path open: explicit user ids everywhere, tasks as
+first-class entities, and raw timestamps under the rounded durations.
+Projects may return later as an optional grouping — the IC simplicity of
+the Timer page must not regress.
