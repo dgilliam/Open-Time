@@ -11,6 +11,7 @@ import {
   formatReportDates,
   hoursLabel,
   parseLocalDate,
+  pluralCount,
   startOfMonth,
   startOfWeek,
   toIso,
@@ -145,40 +146,45 @@ export default function ReportsPage() {
       </div>
       {error && <p className="error-text">{error}</p>}
       {result && (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>{groupBy === "task" ? "Task" : "User"}</th>
-                {groupBy === "task" && <th>Dates</th>}
-                <th className="num">Hours</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.groups.map((g) => (
-                <tr key={g.id}>
-                  <td className={groupBy === "task" ? "mono" : undefined}>{g.name}</td>
-                  {groupBy === "task" && <td className="muted">{formatReportDates(g.dates)}</td>}
-                  <td className="num">{hoursLabel(g.hours * 3600)}</td>
-                </tr>
-              ))}
-              {result.groups.length === 0 && (
+        <>
+          <div className="table-count">
+            {pluralCount(result.groups.length, groupBy === "task" ? "task" : "user")}
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={groupBy === "task" ? 3 : 2} className="muted">
-                    No entries in this range.
-                  </td>
+                  <th>{groupBy === "task" ? "Task" : "User"}</th>
+                  {groupBy === "task" && <th>Dates</th>}
+                  <th className="num">Hours</th>
                 </tr>
-              )}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td>Total</td>
-                {groupBy === "task" && <td></td>}
-                <td className="num">{hoursLabel(result.totalHours * 3600)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {result.groups.map((g) => (
+                  <tr key={g.id}>
+                    <td className={groupBy === "task" ? "mono" : undefined}>{g.name}</td>
+                    {groupBy === "task" && <td className="muted">{formatReportDates(g.dates)}</td>}
+                    <td className="num">{hoursLabel(g.hours * 3600)}</td>
+                  </tr>
+                ))}
+                {result.groups.length === 0 && (
+                  <tr>
+                    <td colSpan={groupBy === "task" ? 3 : 2} className="muted">
+                      No entries in this range.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>Total</td>
+                  {groupBy === "task" && <td></td>}
+                  <td className="num">{hoursLabel(result.totalHours * 3600)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

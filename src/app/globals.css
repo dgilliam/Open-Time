@@ -605,6 +605,13 @@ tfoot td {
   font-size: 0.75rem;
 }
 
+.table-count {
+  margin-left: 0.5rem;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .error-text {
   color: var(--danger);
   font-size: 0.875rem;

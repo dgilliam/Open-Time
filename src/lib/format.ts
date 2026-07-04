@@ -21,6 +21,15 @@ export function hoursLabel(totalSeconds: number, digits = 2): string {
   return `${trimmed === "" ? "0" : trimmed}h`;
 }
 
+/**
+ * Formats a count with a pluralized noun, e.g. pluralCount(20, "task") ->
+ * "20 tasks", pluralCount(1, "task") -> "1 task", pluralCount(6, "entry",
+ * "entries") -> "6 entries" (irregular plural form).
+ */
+export function pluralCount(count: number, singular: string, plural: string = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 /** Format cents as a dollar string, e.g. 12345 -> "$123.45". */
 export function formatDollars(cents: number | null | undefined): string {
   if (cents === null || cents === undefined) return "—";

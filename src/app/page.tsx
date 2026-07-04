@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, deleteEntry, getRunningEntry, listEntries, startTimer, stopTimer } from "@/lib/api";
-import { startOfDay, toIso } from "@/lib/format";
+import { pluralCount, startOfDay, toIso } from "@/lib/format";
 import type { TimeEntry } from "@/lib/types";
 import { EntryDialog } from "@/components/EntryDialog";
 import { EntryList } from "@/components/EntryList";
@@ -89,7 +89,9 @@ export default function Home() {
         error={error}
       />
       <section className="section">
-        <h2>Today</h2>
+        <h2>
+          Today <span className="table-count">{pluralCount(todayEntries.length, "entry", "entries")}</span>
+        </h2>
         <EntryList entries={todayEntries} onEdit={setEditing} onDelete={handleDelete} />
       </section>
       {editing && (

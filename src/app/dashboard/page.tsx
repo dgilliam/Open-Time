@@ -17,6 +17,7 @@ import {
   formatTime,
   hoursLabel,
   parseLocalDate,
+  pluralCount,
   startOfMonth,
   startOfWeek,
   toIso,
@@ -187,7 +188,9 @@ export default function DashboardPage() {
       {ready && (
         <>
           <section className="section">
-            <h2>Team</h2>
+            <h2>
+              Team <span className="table-count">{pluralCount(contributorRows.length, "member")}</span>
+            </h2>
             <div className="stat-row">
               <div className="stat-card">
                 <div className="stat-value">{hoursLabel((userReport?.totalHours ?? 0) * 3600)}</div>
@@ -237,7 +240,10 @@ export default function DashboardPage() {
           </section>
 
           <section className="section">
-            <h2>Tasks</h2>
+            <h2>
+              Tasks{" "}
+              <span className="table-count">{pluralCount(taskReport?.groups.length ?? 0, "task")}</span>
+            </h2>
             <div className="table-scroll">
               <table>
                 <thead>
@@ -282,15 +288,17 @@ export default function DashboardPage() {
           </section>
 
           <section className="section">
-            <h2>Entries</h2>
+            <h2>
+              Entries{" "}
+              <span className="table-count">
+                {isCapped
+                  ? `showing ${ENTRIES_CAP} of ${displayedEntries.length} entries`
+                  : pluralCount(displayedEntries.length, "entry", "entries")}
+              </span>
+            </h2>
             <div className="toolbar">
               <UserSelect users={users} value={entriesFilter} onChange={setEntriesFilter} label="Member" includeAll />
             </div>
-            {isCapped && (
-              <p className="muted small">
-                Showing first {ENTRIES_CAP} of {displayedEntries.length} entries.
-              </p>
-            )}
             <div className="table-scroll">
               <table className="entry-table">
                 <thead>

@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, createUser, listUsers } from "@/lib/api";
+import { pluralCount } from "@/lib/format";
 import type { User } from "@/lib/types";
 import { Dialog } from "@/components/Dialog";
 import { useSession } from "@/components/SessionContext";
@@ -44,28 +45,31 @@ export default function TeamPage() {
         </button>
       </div>
       {loaded && (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td className="strong">{u.name}</td>
-                  <td>{u.email}</td>
-                  <td>
-                    <span className="badge">{u.role}</span>
-                  </td>
+        <>
+          <div className="table-count">{pluralCount(users.length, "member")}</div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td className="strong">{u.name}</td>
+                    <td>{u.email}</td>
+                    <td>
+                      <span className="badge">{u.role}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
       {showAdd && (
         <AddMemberDialog

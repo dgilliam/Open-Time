@@ -14,6 +14,7 @@ import {
   formatHoursMinutes,
   formatShortDate,
   isoWeekNumber,
+  pluralCount,
   startOfWeekSun,
   toIso,
 } from "@/lib/format";
@@ -183,6 +184,7 @@ export default function TimesheetPage() {
         </span>
       </div>
       {error && <p className="error-text">{error}</p>}
+      <div className="table-count">{pluralCount(rows.length, "task")}</div>
       <div className="table-scroll">
         <table className="timesheet-table">
           <thead>
