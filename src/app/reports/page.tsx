@@ -19,7 +19,7 @@ import type { ReportResult, User } from "@/lib/types";
 import { useSession } from "@/components/SessionContext";
 import { UserSelect } from "@/components/UserSelect";
 
-type Preset = "this-week" | "last-week" | "this-month" | "custom";
+type Preset = "this-week" | "last-week" | "this-month" | "last-30" | "custom";
 type GroupBy = "task" | "user";
 
 function presetRange(preset: Preset, customFrom: string, customTo: string): { from: Date; to: Date } {
@@ -36,6 +36,12 @@ function presetRange(preset: Preset, customFrom: string, customTo: string): { fr
     const start = startOfMonth(today);
     const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
     return { from: start, to: end };
+  }
+  if (preset === "last-30") {
+    // Rolling window: unlike the calendar presets, this is always cumulative
+    // and never loses tasks across a week/month boundary.
+    const start = addDays(today, -29);
+    return { from: new Date(start.getFullYear(), start.getMonth(), start.getDate()), to: today };
   }
   return { from: parseLocalDate(customFrom), to: parseLocalDate(customTo) };
 }
@@ -83,14 +89,20 @@ export default function ReportsPage() {
       <h1>Reports</h1>
       <div className="toolbar">
         <div className="preset-group">
-          {(["this-week", "last-week", "this-month"] as const).map((p) => (
+          {(["this-week", "last-week", "this-month", "last-30"] as const).map((p) => (
             <button
               key={p}
               type="button"
               className={preset === p ? "btn btn-preset active" : "btn btn-preset"}
               onClick={() => setPreset(p)}
             >
-              {p === "this-week" ? "This week" : p === "last-week" ? "Last week" : "This month"}
+              {p === "this-week"
+                ? "This week"
+                : p === "last-week"
+                ? "Last week"
+                : p === "this-month"
+                ? "This month"
+                : "Last 30 days"}
             </button>
           ))}
         </div>
