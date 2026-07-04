@@ -145,8 +145,9 @@ Modeled on the solidtime-style weekly grid the founder supplied:
   at 09:00 local that day. Entering 0 (or clearing) deletes them.
   Running entries are never touched or counted by the grid.
 - `+ Add row`: task combobox (same component as Timer) adds an empty row
-  client-side. `Copy last week ▾`: adds last week's task rows (rows only,
-  no hours).
+  client-side. (A "Copy last week" affordance was built then cut
+  2026-07-04: rows materialize from entries automatically here, so
+  copying rows without hours added nothing.)
 - Nav order: Timer, Timesheet, Calendar, Reports (+ Team admin-only).
 
 ### API additions/changes

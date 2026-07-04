@@ -165,29 +165,6 @@ export default function TimesheetPage() {
     setAddingRow(false);
   }
 
-  async function copyLastWeek() {
-    setError(null);
-    try {
-      const lastWeekStart = addDays(weekStart, -7);
-      const lastWeekEnd = addDays(lastWeekStart, 6);
-      const from = toIso(lastWeekStart);
-      const to = toIso(
-        new Date(lastWeekEnd.getFullYear(), lastWeekEnd.getMonth(), lastWeekEnd.getDate(), 23, 59, 59, 999)
-      );
-      const lastWeekEntries = await listEntries({ from, to });
-      const names = Array.from(
-        new Map(
-          lastWeekEntries.filter((e) => e.stoppedAt !== null).map((e) => [normalizeKey(e.taskName), e.taskName])
-        ).values()
-      );
-      const existingKeys = new Set(rows.map((r) => r.key));
-      const additions = names.filter((n) => !existingKeys.has(normalizeKey(n)));
-      if (additions.length > 0) setExtraRows((prev) => [...prev, ...additions]);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "failed to copy last week");
-    }
-  }
-
   if (!user || !ready) return null;
 
   return (
@@ -307,9 +284,6 @@ export default function TimesheetPage() {
             + Add row
           </button>
         )}
-        <button type="button" className="btn-link" onClick={copyLastWeek}>
-          Copy last week ▾
-        </button>
       </div>
     </div>
   );
