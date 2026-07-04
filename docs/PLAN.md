@@ -163,6 +163,46 @@ Modeled on the solidtime-style weekly grid the founder supplied:
   Jul 2`), otherwise `Jun 29 – Jul 4 · 5 days`.
 - Rows sorted by most recently worked first (per the API change).
 
+## v2.2 — Admin dashboard (2026-07-04)
+
+The admin role's purpose: consolidated hours by task, by contributor, and
+team-wide, plus the ability to edit any entry. Members remain strictly
+self-only (unchanged, already enforced).
+
+### API changes (admin-only surface area)
+
+- GET `/api/entries?userId=all` — admin only: everyone's entries (userName
+  already joined). Members passing `all` (or any other user) still 403.
+- GET `/api/reports?userId=all&groupBy=task` — admin only: task groups
+  aggregated across the whole team; each group gains
+  `contributors: [{id, name, hours}]` (desc by hours). `groupBy=user`
+  unchanged. Existing single-user and self behavior unchanged.
+- No new mutation endpoints: PATCH/DELETE `/api/entries/[id]` already
+  authorize owner-or-admin; the dashboard reuses them.
+
+### Page `/dashboard` (admin only; members redirected to `/`)
+
+Nav for admin: Dashboard, Timer, Timesheet, Calendar, Reports, Team —
+Dashboard first and is the admin's post-login landing page. Sections, all
+driven by one date-range picker (presets This week / Last week / This
+month / custom):
+
+1. **Team** — stat row: team total hours, active contributors, entries
+   count. Then per-contributor table (every member listed even at 0h in
+   range: name, hours, active days, last worked), total row.
+2. **Tasks** — consolidated by task: task (mono), total hours,
+   contributors (compact: names with hours), dates worked (compact format
+   from v2.1). Sorted by recency, per the API.
+3. **Entries** — member filter (All + each member) + the range; table of
+   entries (member, task, date, start–stop, duration) with Edit/Delete
+   reusing the existing EntryDialog — this is where admin corrects
+   anyone's entry. Newest first, cap at 200 rows with a "showing first
+   200" note.
+
+Seed: bump to 5 members (add two more ICs) so the dashboard reflects the
+real team shape. Next up (not this task): admin-only export from the
+dashboard's data.
+
 ## Design system (v2 restyle, 2026-07-04)
 
 Written from scratch in our own CSS, visually inspired by cal.com's design
