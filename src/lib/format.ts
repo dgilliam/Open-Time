@@ -80,13 +80,19 @@ export function weekLabel(monday: Date): string {
   return `${formatShortDate(monday)} – ${formatShortDate(sunday)}`;
 }
 
-/** Converts an ISO-8601 UTC string to a value suitable for an <input type="datetime-local">, in local time. */
+/**
+ * Converts an ISO-8601 UTC string to a value suitable for an
+ * <input type="datetime-local" step="1">, in local time, including seconds.
+ * Seconds precision matters here: entries created via quick start/stop can be
+ * under a minute long, and truncating to minute granularity would make the
+ * start/stop times equal (which the API rejects) as soon as the form is saved.
+ */
 export function toDatetimeLocalValue(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
     d.getMinutes()
-  )}`;
+  )}:${pad(d.getSeconds())}`;
 }
 
 /** Converts an <input type="datetime-local"> value (local time, no timezone) to an ISO-8601 UTC string. */
@@ -99,4 +105,21 @@ export function durationSeconds(startedAt: string, stoppedAt: string | null, now
   const start = new Date(startedAt).getTime();
   const end = stoppedAt ? new Date(stoppedAt).getTime() : now.getTime();
   return Math.max(0, (end - start) / 1000);
+}
+
+/** Format a local Date as a "YYYY-MM-DD" string for an <input type="date">. */
+export function dateInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Parses a "YYYY-MM-DD" <input type="date"> value as a local-midnight Date. */
+export function parseLocalDate(value: string): Date {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+/** First day of the local-time month containing `date`. */
+export function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
