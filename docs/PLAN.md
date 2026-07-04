@@ -107,6 +107,10 @@ Entry objects are returned with joined `projectName`, `projectColor`,
   project/user, totals table with billable value, CSV export button.
 - Shared layout with left nav, RepoScout-neutral styling: system font stack,
   one accent color `#4f46e5`, light/dark via `prefers-color-scheme`.
+- Team members are created via an "Add teammate" dialog on the nav's user
+  picker (name + email only — no roles, no user management page). This is
+  the entire team-management surface; do not grow it without a product
+  decision.
 
 ## Task breakdown (sequential Sonnet executor runs)
 
