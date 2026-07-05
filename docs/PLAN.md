@@ -384,6 +384,12 @@ revisit only when invoicing becomes a real feature.
 Execution: T18 = schema + repo + API + CSV + tests. T19 = UI (day
 navigator, add-time dialog, wrap-up dialog, badges).
 
+Addendum (2026-07-05, T21): clicking a STATUS BADGE cycles the status in
+place (open → submitted → accepted → dead_end → open), saving
+immediately via the same PATCH; title tooltip "Click to change status";
+badge shows a brief disabled state while saving; surfaces refetch after.
+The wrap-up dialog remains the path for link/details.
+
 Addendum (2026-07-05, T20): clicking a task name ANYWHERE opens the
 wrap-up dialog, both roles — dashboard Tasks + Entries tables, reports
 task grouping, timesheet row labels (Timer list already does). Members
