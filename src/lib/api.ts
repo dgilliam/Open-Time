@@ -86,6 +86,14 @@ export function listTasks(q = ""): Promise<Task[]> {
   return request<Task[]>(`/api/tasks${qs ? `?${qs}` : ""}`);
 }
 
+/** Task wrap-up metadata (v2.6): link/details/status. Server enforces auth (admin or a contributor). */
+export function updateTask(
+  id: string,
+  patch: { link?: string | null; details?: string | null; status?: string }
+): Promise<Task> {
+  return request<Task>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
 // ---------- entries ----------
 
 /** `userId: "all"` is admin-only (403 for members) and returns every user's entries — see the admin dashboard. */

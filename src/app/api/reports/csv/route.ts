@@ -5,7 +5,7 @@ import { apiErrorResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const CSV_HEADER = "member,project,task,duration_hours,date";
+const CSV_HEADER = "member,project,task,task_status,task_link,task_details,duration_hours,date";
 
 /** Double-quotes a field if it contains a comma, quote, or newline, per RFC 4180. */
 function csvField(value: string): string {
@@ -44,6 +44,9 @@ export async function GET(req: NextRequest) {
         member: e.userName,
         project: e.userProject ?? "",
         task: e.taskName,
+        taskStatus: e.taskStatus,
+        taskLink: e.taskLink ?? "",
+        taskDetails: e.taskDetails ?? "",
         durationHours: (e.durationSecs as number) / 3600,
         date: localDateKey(e.startedAt),
       }))
@@ -55,9 +58,16 @@ export async function GET(req: NextRequest) {
     const lines = [CSV_HEADER];
     for (const row of rows) {
       lines.push(
-        [csvField(row.member), csvField(row.project), csvField(row.task), String(row.durationHours), row.date].join(
-          ","
-        )
+        [
+          csvField(row.member),
+          csvField(row.project),
+          csvField(row.task),
+          csvField(row.taskStatus),
+          csvField(row.taskLink),
+          csvField(row.taskDetails),
+          String(row.durationHours),
+          row.date,
+        ].join(",")
       );
     }
     const csv = lines.join("\n") + "\n";

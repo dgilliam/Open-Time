@@ -2,7 +2,16 @@ import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { hashPassword } from "./auth";
 import { ApiError } from "./types";
-import type { CalendarDay, ReportGroup, ReportResult, Role, Task, TimeEntry, User } from "./types";
+import type {
+  CalendarDay,
+  ReportGroup,
+  ReportResult,
+  Role,
+  Task,
+  TaskStatus,
+  TimeEntry,
+  User,
+} from "./types";
 
 // ---------- row mappers ----------
 
@@ -31,10 +40,20 @@ interface TaskRow {
   id: string;
   name: string;
   created_at: string;
+  link: string | null;
+  details: string | null;
+  status: string;
 }
 
 function rowToTask(row: TaskRow): Task {
-  return { id: row.id, name: row.name, createdAt: row.created_at };
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+    link: row.link ?? null,
+    details: row.details ?? null,
+    status: (row.status ?? "open") as TaskStatus,
+  };
 }
 
 interface EntryRow {
@@ -46,6 +65,9 @@ interface EntryRow {
   duration_secs: number | null;
   created_at: string;
   task_name: string;
+  task_status: string;
+  task_link: string | null;
+  task_details: string | null;
   user_name: string;
   user_project: string | null;
 }
@@ -62,6 +84,9 @@ function rowToEntry(row: EntryRow): TimeEntry {
     taskName: row.task_name,
     userName: row.user_name,
     userProject: row.user_project ?? null,
+    taskStatus: (row.task_status ?? "open") as TaskStatus,
+    taskLink: row.task_link ?? null,
+    taskDetails: row.task_details ?? null,
   };
 }
 
@@ -78,6 +103,9 @@ const ENTRY_SELECT = `
     e.duration_secs as duration_secs,
     e.created_at as created_at,
     t.name as task_name,
+    t.status as task_status,
+    t.link as task_link,
+    t.details as task_details,
     u.name as user_name,
     u.project as user_project
   FROM time_entries e
@@ -214,7 +242,85 @@ export function findOrCreateTask(rawName: string): Task {
   const id = randomUUID();
   const createdAt = new Date().toISOString();
   db.prepare("INSERT INTO tasks (id, name, created_at) VALUES (?, ?, ?)").run(id, name, createdAt);
-  return { id, name, createdAt };
+  return { id, name, createdAt, link: null, details: null, status: "open" };
+}
+
+export function getTaskById(id: string): Task | null {
+  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as TaskRow | undefined;
+  return row ? rowToTask(row) : null;
+}
+
+export const TASK_STATUSES: TaskStatus[] = ["open", "submitted", "accepted", "dead_end"];
+
+/** True when `value` parses as an http/https URL. */
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Patches a task's wrap-up metadata (link/details/status) — docs/PLAN.md
+ * v2.6 section B. Authorization lives here (not the route): allowed for an
+ * admin, or a member who has logged at least one time entry on this task;
+ * 403 otherwise. 404 for an unknown task id. Validation: status must be one
+ * of TASK_STATUSES (400) — SQLite's ALTER-added status column has no CHECK
+ * constraint on pre-v2.6 databases, so this is the actual enforcement point;
+ * link trims to null, and when non-empty must parse as an http(s) URL
+ * (400) and be ≤500 chars; details trims to null and must be ≤2000 chars.
+ */
+export function updateTask(
+  taskId: string,
+  actingUser: { id: string; role: Role },
+  patch: { link?: string | null; details?: string | null; status?: string }
+): Task {
+  const existing = getTaskById(taskId);
+  if (!existing) throw new ApiError(404, "task not found");
+
+  if (actingUser.role !== "admin") {
+    const hasEntry = db
+      .prepare("SELECT 1 FROM time_entries WHERE task_id = ? AND user_id = ? LIMIT 1")
+      .get(taskId, actingUser.id);
+    if (!hasEntry) throw new ApiError(403, "forbidden");
+  }
+
+  let status = existing.status;
+  if (patch.status !== undefined) {
+    if (!TASK_STATUSES.includes(patch.status as TaskStatus)) {
+      throw new ApiError(400, "status must be one of open, submitted, accepted, dead_end");
+    }
+    status = patch.status as TaskStatus;
+  }
+
+  let link = existing.link;
+  if (patch.link !== undefined) {
+    const trimmed = (patch.link ?? "").trim();
+    if (!trimmed) {
+      link = null;
+    } else {
+      if (trimmed.length > 500) throw new ApiError(400, "link must be at most 500 characters");
+      if (!isHttpUrl(trimmed)) throw new ApiError(400, "link must be a valid http(s) URL");
+      link = trimmed;
+    }
+  }
+
+  let details = existing.details;
+  if (patch.details !== undefined) {
+    const trimmed = (patch.details ?? "").trim();
+    if (trimmed.length > 2000) throw new ApiError(400, "details must be at most 2000 characters");
+    details = trimmed ? trimmed : null;
+  }
+
+  db.prepare("UPDATE tasks SET link = ?, details = ?, status = ? WHERE id = ?").run(
+    link,
+    details,
+    status,
+    taskId
+  );
+  return getTaskById(taskId)!;
 }
 
 /** Tasks the given user has logged time to, filtered by substring, most recently used first. */
@@ -222,7 +328,8 @@ export function listTasksForUser(userId: string, q: string, limit = 20): Task[] 
   const like = `%${(q || "").trim().toLowerCase()}%`;
   const rows = db
     .prepare(
-      `SELECT t.id as id, t.name as name, t.created_at as created_at
+      `SELECT t.id as id, t.name as name, t.created_at as created_at,
+              t.link as link, t.details as details, t.status as status
        FROM tasks t
        JOIN time_entries e ON e.task_id = t.id
        WHERE e.user_id = ? AND LOWER(t.name) LIKE ?
@@ -450,6 +557,8 @@ export function report(opts: {
     contributors?: Map<string, { name: string; secs: number }>;
     taskIds?: Set<string>;
     project?: string | null;
+    status?: TaskStatus;
+    link?: string | null;
   }
   const groups = new Map<string, Acc>();
   let totalSecs = 0;
@@ -467,7 +576,9 @@ export function report(opts: {
     dateKey: string,
     contributor?: { id: string; name: string },
     taskId?: string,
-    project?: string | null
+    project?: string | null,
+    taskStatus?: TaskStatus,
+    taskLink?: string | null
   ): void {
     totalSecs += secs;
     let acc = groups.get(key);
@@ -479,6 +590,8 @@ export function report(opts: {
         dates: new Set(),
         contributors: withContributors ? new Map() : undefined,
         project,
+        status: taskStatus,
+        link: taskLink,
       };
       groups.set(key, acc);
     }
@@ -509,7 +622,10 @@ export function report(opts: {
         e.durationSecs as number,
         localDateKey(e.startedAt),
         { id: e.userId, name: e.userName },
-        e.taskId
+        e.taskId,
+        undefined,
+        e.taskStatus,
+        e.taskLink
       );
     }
   } else {
@@ -547,6 +663,10 @@ export function report(opts: {
       if (opts.groupBy === "user") {
         group.taskCount = acc.taskIds?.size ?? 0;
         group.project = acc.project ?? null;
+      }
+      if (opts.groupBy === "task") {
+        group.status = acc.status ?? "open";
+        group.link = acc.link ?? null;
       }
       return group;
     })

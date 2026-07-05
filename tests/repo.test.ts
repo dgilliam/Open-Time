@@ -239,6 +239,147 @@ describe("findOrCreateTask", () => {
   });
 });
 
+describe("updateTask (v2.6 wrap-up metadata)", () => {
+  it("defaults a fresh task to status 'open' and null link/details", () => {
+    const task = repo.findOrCreateTask("ab50-fresh-task");
+    expect(task.status).toBe("open");
+    expect(task.link).toBeNull();
+    expect(task.details).toBeNull();
+  });
+
+  it("allows admin to patch any task, regardless of entry ownership", () => {
+    const task = repo.findOrCreateTask("ab51-admin-only-task");
+    const updated = repo.updateTask(
+      task.id,
+      { id: admin.id, role: "admin" },
+      { status: "accepted", link: "https://reposcout.slack.com/archives/C1/p1", details: "done" }
+    );
+    expect(updated.status).toBe("accepted");
+    expect(updated.link).toBe("https://reposcout.slack.com/archives/C1/p1");
+    expect(updated.details).toBe("done");
+  });
+
+  it("allows a member with at least one entry on the task", () => {
+    const entry = repo.createEntry({
+      userId: userA.id,
+      task: "ab52-contributor-task",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    const updated = repo.updateTask(
+      entry.taskId,
+      { id: userA.id, role: "member" },
+      { status: "submitted" }
+    );
+    expect(updated.status).toBe("submitted");
+  });
+
+  it("403s a member with no entry on the task", () => {
+    const task = repo.findOrCreateTask("ab53-not-mine-task");
+    expectApiError(
+      () => repo.updateTask(task.id, { id: userA.id, role: "member" }, { status: "submitted" }),
+      403
+    );
+  });
+
+  it("404s for an unknown task id", () => {
+    expectApiError(
+      () => repo.updateTask("nope", { id: admin.id, role: "admin" }, { status: "submitted" }),
+      404
+    );
+  });
+
+  it("rejects an invalid status", () => {
+    const task = repo.findOrCreateTask("ab54-bad-status-task");
+    expectApiError(
+      () => repo.updateTask(task.id, { id: admin.id, role: "admin" }, { status: "in_progress" }),
+      400
+    );
+  });
+
+  it.each(["open", "submitted", "accepted", "dead_end"])("accepts status %s", (status) => {
+    const task = repo.findOrCreateTask(`ab55-status-${status}`);
+    const updated = repo.updateTask(task.id, { id: admin.id, role: "admin" }, { status });
+    expect(updated.status).toBe(status);
+  });
+
+  it("rejects a link that isn't a URL", () => {
+    const task = repo.findOrCreateTask("ab56-bad-link-task");
+    expectApiError(
+      () => repo.updateTask(task.id, { id: admin.id, role: "admin" }, { link: "not a url" }),
+      400
+    );
+  });
+
+  it("rejects a non-http(s) URL scheme (ftp)", () => {
+    const task = repo.findOrCreateTask("ab57-ftp-link-task");
+    expectApiError(
+      () => repo.updateTask(task.id, { id: admin.id, role: "admin" }, { link: "ftp://x" }),
+      400
+    );
+  });
+
+  it("accepts an https Slack-thread-style URL", () => {
+    const task = repo.findOrCreateTask("ab58-good-link-task");
+    const updated = repo.updateTask(
+      task.id,
+      { id: admin.id, role: "admin" },
+      { link: "https://reposcout.slack.com/archives/C012ABCDE/p1717000000000100" }
+    );
+    expect(updated.link).toBe("https://reposcout.slack.com/archives/C012ABCDE/p1717000000000100");
+  });
+
+  it("rejects a link over 500 characters", () => {
+    const task = repo.findOrCreateTask("ab59-long-link-task");
+    const longLink = "https://example.com/" + "x".repeat(500);
+    expectApiError(
+      () => repo.updateTask(task.id, { id: admin.id, role: "admin" }, { link: longLink }),
+      400
+    );
+  });
+
+  it("trims a whitespace-only link to null", () => {
+    const task = repo.findOrCreateTask("ab60-whitespace-link-task");
+    const updated = repo.updateTask(task.id, { id: admin.id, role: "admin" }, { link: "   " });
+    expect(updated.link).toBeNull();
+  });
+
+  it("rejects details over 2000 characters", () => {
+    const task = repo.findOrCreateTask("ab61-long-details-task");
+    expectApiError(
+      () =>
+        repo.updateTask(task.id, { id: admin.id, role: "admin" }, { details: "x".repeat(2001) }),
+      400
+    );
+  });
+
+  it("trims details and empty/whitespace-only becomes null", () => {
+    const task = repo.findOrCreateTask("ab62-details-task");
+    const updated = repo.updateTask(
+      task.id,
+      { id: admin.id, role: "admin" },
+      { details: "  some notes  " }
+    );
+    expect(updated.details).toBe("some notes");
+
+    const cleared = repo.updateTask(task.id, { id: admin.id, role: "admin" }, { details: "   " });
+    expect(cleared.details).toBeNull();
+  });
+
+  it("leaves fields not present in the patch untouched", () => {
+    const task = repo.findOrCreateTask("ab63-partial-patch-task");
+    repo.updateTask(
+      task.id,
+      { id: admin.id, role: "admin" },
+      { status: "accepted", link: "https://example.com/thread" }
+    );
+    const updated = repo.updateTask(task.id, { id: admin.id, role: "admin" }, { details: "note" });
+    expect(updated.status).toBe("accepted");
+    expect(updated.link).toBe("https://example.com/thread");
+    expect(updated.details).toBe("note");
+  });
+});
+
 describe("task autocomplete scoping (/api/tasks?q=)", () => {
   beforeEach(() => {
     // userA has logged time to two tasks; userB to a third. A task only B
@@ -710,6 +851,53 @@ describe("report — dates + recency sort (v2.1)", () => {
 
     const result = repo.report({ groupBy: "user" });
     expect(result.groups.map((g) => g.id)).toEqual([userB.id, userA.id]);
+  });
+});
+
+describe("report — task groups carry status/link (v2.6)", () => {
+  it("defaults status to 'open' and link to null for a never-patched task", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab64-default-status",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    const result = repo.report({ userId: userA.id, groupBy: "task" });
+    const group = result.groups.find((g) => g.name === "AB64-default-status")!;
+    expect(group.status).toBe("open");
+    expect(group.link).toBeNull();
+  });
+
+  it("carries the task's current status/link onto its report group", () => {
+    const entry = repo.createEntry({
+      userId: userA.id,
+      task: "ab65-wrapped-up",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    repo.updateTask(
+      entry.taskId,
+      { id: admin.id, role: "admin" },
+      { status: "accepted", link: "https://reposcout.slack.com/archives/C1/p1" }
+    );
+
+    const result = repo.report({ userId: userA.id, groupBy: "task" });
+    const group = result.groups.find((g) => g.name === "AB65-wrapped-up")!;
+    expect(group.status).toBe("accepted");
+    expect(group.link).toBe("https://reposcout.slack.com/archives/C1/p1");
+  });
+
+  it("leaves status/link unset on groupBy=user groups", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab66-user-group",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    const result = repo.report({ groupBy: "user" });
+    const group = result.groups.find((g) => g.id === userA.id)!;
+    expect(group.status).toBeUndefined();
+    expect(group.link).toBeUndefined();
   });
 });
 

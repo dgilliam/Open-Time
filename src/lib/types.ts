@@ -11,10 +11,16 @@ export interface User {
   project: string | null;
 }
 
+export type TaskStatus = "open" | "submitted" | "accepted" | "dead_end";
+
 export interface Task {
   id: string;
   name: string;
   createdAt: string;
+  // v2.6 wrap-up metadata (docs/PLAN.md v2.6 section B) — all optional.
+  link: string | null;
+  details: string | null;
+  status: TaskStatus;
 }
 
 export interface TimeEntry {
@@ -29,6 +35,11 @@ export interface TimeEntry {
   taskName: string;
   userName: string;
   userProject: string | null;
+  // Joined from the task's current wrap-up metadata (v2.6) — used by the CSV
+  // export; not surfaced in the UI's entry lists.
+  taskStatus: TaskStatus;
+  taskLink: string | null;
+  taskDetails: string | null;
 }
 
 export interface Contributor {
@@ -51,6 +62,11 @@ export interface ReportGroup {
   taskCount?: number;
   // Only populated for groupBy=user: the user's current project label (v2.5).
   project?: string | null;
+  // Only populated for groupBy=task groups (v2.6): the task's current
+  // wrap-up status/link. Defaults to "open"/null when the task has never
+  // been patched. Backward compatible — absent for groupBy=user groups.
+  status?: TaskStatus;
+  link?: string | null;
 }
 
 export interface ReportResult {

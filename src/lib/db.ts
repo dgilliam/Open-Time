@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  link TEXT,
+  details TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','submitted','accepted','dead_end'))
 );
 
 CREATE TABLE IF NOT EXISTS time_entries (
@@ -81,9 +84,63 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_started_at ON time_entries(started_a
 // to an existing table, so we check PRAGMA table_info(users) for a `project`
 // column and ALTER TABLE to add it if missing. No production data to
 // preserve yet; revisit with a real migration tool before that changes.
-const userColumns = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
-if (!userColumns.some((c) => c.name === "project")) {
-  db.exec("ALTER TABLE users ADD COLUMN project TEXT");
+// Adds a column if missing. The PRAGMA check alone races when parallel
+// build workers open the same file with separate module registries (each
+// passes the check before either commits its ALTER), so a losing worker's
+// "duplicate column name" is swallowed — the column exists, which is all
+// we need. Any other error still throws.
+function addColumnIfMissing(table: string, column: string, ddl: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (cols.some((c) => c.name === column)) return;
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  } catch (err) {
+    if (!(err instanceof Error && /duplicate column name/i.test(err.message))) throw err;
+  }
+}
+
+addColumnIfMissing("users", "project", "project TEXT");
+
+// ---------- v2.6 additive dev migration: tasks.link/details/status ----------
+// Task wrap-up metadata (docs/PLAN.md v2.6 section B): an optional link URL,
+// optional free-text details, and a status enum defaulting to 'open'. Same
+// idempotent PRAGMA-guarded ALTER pattern as v2.5's users.project above.
+// Note: SQLite's ALTER TABLE ADD COLUMN cannot attach a CHECK constraint, so
+// for any pre-v2.6 database migrated via the ALTERs below, the status enum
+// is enforced in the repo layer instead (see updateTask in src/lib/repo.ts).
+// The CREATE TABLE above already includes the CHECK for brand-new databases.
+addColumnIfMissing("tasks", "link", "link TEXT");
+addColumnIfMissing("tasks", "details", "details TEXT");
+addColumnIfMissing("tasks", "status", "status TEXT NOT NULL DEFAULT 'open'");
+
+// ---------- nightly backup schedule (production only) ----------
+// This lives here, not in instrumentation.ts: Next's dev compiler bundles
+// instrumentation for contexts where native modules can't resolve (it broke
+// `next dev` with "Can't resolve 'fs'" via better-sqlite3). db.ts is only
+// ever imported by Node-runtime code (routes, scripts, tests), so scheduling
+// from here is bundler-safe. The globalThis flag guards against duplicate
+// timers when separate route bundles each instantiate this module in one
+// process; the dynamic import breaks the db<->backup module cycle at load
+// time.
+const BACKUP_FLAG = "__opentimeBackupScheduled";
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.OPENTIME_BACKUPS !== "0" &&
+  !(globalThis as Record<string, unknown>)[BACKUP_FLAG]
+) {
+  (globalThis as Record<string, unknown>)[BACKUP_FLAG] = true;
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const runScheduled = () => {
+    import("./backup")
+      .then(({ runBackup }) => runBackup())
+      .catch((err) => console.error("[backup] scheduled backup failed:", err));
+  };
+  const timer = setTimeout(() => {
+    runScheduled();
+    setInterval(runScheduled, ONE_DAY_MS).unref?.();
+  }, 60_000);
+  timer.unref?.();
+  console.log("[backup] scheduled nightly backups (first run in ~60s, then every 24h)");
 }
 
 export default db;

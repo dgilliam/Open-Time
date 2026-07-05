@@ -23,6 +23,7 @@ const userByIdRoute = await import("../src/app/api/users/[id]/route");
 const reportsRoute = await import("../src/app/api/reports/route");
 const reportsCsvRoute = await import("../src/app/api/reports/csv/route");
 const tasksRoute = await import("../src/app/api/tasks/route");
+const taskByIdRoute = await import("../src/app/api/tasks/[id]/route");
 
 function resetDb() {
   db.exec("DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM sessions; DELETE FROM users;");
@@ -282,9 +283,9 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.headers.get("content-type")).toContain("text/csv");
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[0]).toBe("member,project,task,duration_hours,date");
+    expect(lines[0]).toBe("member,project,task,task_status,task_link,task_details,duration_hours,date");
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Bob,,AB1-bobs-task,1,2026-01-01");
+    expect(lines[1]).toBe("Bob,,AB1-bobs-task,open,,,1,2026-01-01");
   });
 
   it("includes the member's assigned project in its column", async () => {
@@ -294,7 +295,7 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[1]).toBe("Bob,Platform,AB1-bobs-task,1,2026-01-01");
+    expect(lines[1]).toBe("Bob,Platform,AB1-bobs-task,open,,,1,2026-01-01");
   });
 
   it("200s for admin with userId=all, containing multiple members", async () => {
@@ -311,7 +312,7 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[0]).toBe("member,project,task,duration_hours,date");
+    expect(lines[0]).toBe("member,project,task,task_status,task_link,task_details,duration_hours,date");
     const members = lines.slice(1).map((line) => line.split(",")[0]);
     expect(new Set(members)).toEqual(new Set(["Alice", "Bob"]));
   });
@@ -328,7 +329,51 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[1]).toBe('Alice,,"meeting, planning",1,2026-01-04');
+    expect(lines[1]).toBe('Alice,,"meeting, planning",open,,,1,2026-01-04');
+  });
+
+  it("populates task_status/task_link/task_details from the task's wrap-up metadata", async () => {
+    const entry = await repo.createEntry({
+      userId: userA.id,
+      task: "ab50-wrapped-task",
+      startedAt: "2026-01-04T09:00:00.000Z",
+      stoppedAt: "2026-01-04T10:00:00.000Z",
+    });
+    await repo.updateTask(
+      entry.taskId,
+      { id: admin.id, role: "admin" },
+      { status: "accepted", link: "https://reposcout.slack.com/archives/C1/p1", details: "all done" }
+    );
+
+    const res = await reportsCsvRoute.GET(req(`/api/reports/csv`, { token: tokenA }));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    expect(lines[1]).toBe(
+      "Alice,,AB50-wrapped-task,accepted,https://reposcout.slack.com/archives/C1/p1,all done,1,2026-01-04"
+    );
+  });
+
+  it("quotes task_details containing a newline so it survives round-trip", async () => {
+    const entry = await repo.createEntry({
+      userId: userA.id,
+      task: "ab51-multiline-details",
+      startedAt: "2026-01-04T09:00:00.000Z",
+      stoppedAt: "2026-01-04T10:00:00.000Z",
+    });
+    await repo.updateTask(
+      entry.taskId,
+      { id: admin.id, role: "admin" },
+      { status: "submitted", details: "line one\nline two" }
+    );
+
+    const res = await reportsCsvRoute.GET(req(`/api/reports/csv`, { token: tokenA }));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    // The embedded newline means this row spans two physical lines within one
+    // quoted CSV field — a naive split("\n") would (incorrectly) see it as
+    // two rows. Assert on the raw text instead of a line-split.
+    expect(text).toContain('AB51-multiline-details,submitted,,"line one\nline two",1,2026-01-04');
   });
 
   it("orders rows by date ascending", async () => {
@@ -372,7 +417,7 @@ describe("GET /api/reports/csv?project= (v2.4 addendum, dashboard entries export
     const text = await res.text();
     const lines = text.trim().split("\n");
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Alice,Platform,AB46-alice-task,1,2026-01-03");
+    expect(lines[1]).toBe("Alice,Platform,AB46-alice-task,open,,,1,2026-01-03");
   });
 
   it("project=__none__ returns only unassigned members' entries", async () => {
@@ -392,7 +437,7 @@ describe("GET /api/reports/csv?project= (v2.4 addendum, dashboard entries export
     const text = await res.text();
     const lines = text.trim().split("\n");
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Bob,,AB1-bobs-task,1,2026-01-01");
+    expect(lines[1]).toBe("Bob,,AB1-bobs-task,open,,,1,2026-01-01");
   });
 
   it("composes with userId=all and no project filter (absent = off)", async () => {
@@ -432,7 +477,7 @@ describe("GET /api/reports/csv?project= (v2.4 addendum, dashboard entries export
     // Self-scope (targetUserId defaults to Bob) still applies: only Bob's row,
     // never Alice's, even though both share the "Platform" project.
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Bob,Platform,AB1-bobs-task,1,2026-01-01");
+    expect(lines[1]).toBe("Bob,Platform,AB1-bobs-task,open,,,1,2026-01-01");
   });
 
   it("403s a member attempting userId=all with a project filter", async () => {
@@ -453,5 +498,75 @@ describe("GET /api/tasks scoping", () => {
     const resA = await tasksRoute.GET(req("/api/tasks", { token: tokenA }));
     const jsonA = await resA.json();
     expect(jsonA.data).toEqual([]);
+  });
+});
+
+describe("PATCH /api/tasks/[id] authorization (v2.6 wrap-up metadata)", () => {
+  it("401s with no session", async () => {
+    // beforeEach logged userB's entry on "ab1-bobs-task".
+    const bobsTask = repo.listTasksForUser(userB.id, "")[0];
+    const res = await taskByIdRoute.PATCH(
+      req(`/api/tasks/${bobsTask.id}`, { method: "PATCH", body: { status: "accepted" } }),
+      { params: Promise.resolve({ id: bobsTask.id }) }
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("403s a member with no entry on the task", async () => {
+    const bobsTask = repo.listTasksForUser(userB.id, "")[0];
+    const res = await taskByIdRoute.PATCH(
+      req(`/api/tasks/${bobsTask.id}`, { method: "PATCH", token: tokenA, body: { status: "accepted" } }),
+      { params: Promise.resolve({ id: bobsTask.id }) }
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("200s a contributor (member with an entry on the task)", async () => {
+    const bobsTask = repo.listTasksForUser(userB.id, "")[0];
+    const res = await taskByIdRoute.PATCH(
+      req(`/api/tasks/${bobsTask.id}`, {
+        method: "PATCH",
+        token: tokenB,
+        body: { status: "submitted", link: "https://reposcout.slack.com/archives/C1/p1" },
+      }),
+      { params: Promise.resolve({ id: bobsTask.id }) }
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.status).toBe("submitted");
+    expect(json.data.link).toBe("https://reposcout.slack.com/archives/C1/p1");
+  });
+
+  it("200s for admin regardless of entry ownership", async () => {
+    const bobsTask = repo.listTasksForUser(userB.id, "")[0];
+    const res = await taskByIdRoute.PATCH(
+      req(`/api/tasks/${bobsTask.id}`, {
+        method: "PATCH",
+        token: adminToken,
+        body: { status: "dead_end", details: "closing this out" },
+      }),
+      { params: Promise.resolve({ id: bobsTask.id }) }
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.status).toBe("dead_end");
+    expect(json.data.details).toBe("closing this out");
+  });
+
+  it("404s for an unknown task id", async () => {
+    const res = await taskByIdRoute.PATCH(
+      req(`/api/tasks/nope`, { method: "PATCH", token: adminToken, body: { status: "accepted" } }),
+      { params: Promise.resolve({ id: "nope" }) }
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("400s an invalid status", async () => {
+    const bobsTask = repo.listTasksForUser(userB.id, "")[0];
+    const res = await taskByIdRoute.PATCH(
+      req(`/api/tasks/${bobsTask.id}`, { method: "PATCH", token: adminToken, body: { status: "in_progress" } }),
+      { params: Promise.resolve({ id: bobsTask.id }) }
+    );
+    expect(res.status).toBe(400);
   });
 });

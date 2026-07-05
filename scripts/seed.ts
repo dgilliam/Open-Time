@@ -75,6 +75,72 @@ function main() {
   const allUsers = [admin, ...members];
 
   const tasks = TASK_NAMES.map((name) => repo.findOrCreateTask(name));
+  const taskByName = new Map(tasks.map((t) => [t.name, t]));
+
+  // v2.6: give a representative ~8 tasks wrap-up metadata (status/link/
+  // details) so the dashboard badges, report link icons, and the CSV's new
+  // columns have real data to demo. Applied via the admin bypass in
+  // updateTask's authorization (admin may patch any task regardless of
+  // entry ownership).
+  const wrapUps: {
+    name: string;
+    status: "submitted" | "accepted" | "dead_end";
+    link?: string;
+    details?: string;
+  }[] = [
+    {
+      name: "GM7VKNDN9Y3F-otp-resend-onboarding",
+      status: "accepted",
+      link: "https://reposcout.slack.com/archives/C012ABCDE/p1717000000000100",
+      details: "Reviewed and merged; QA signed off on the resend flow.",
+    },
+    {
+      name: "A1B2C3-fix-login-bug",
+      status: "accepted",
+      link: "https://reposcout.slack.com/archives/C012ABCDE/p1717000000000200",
+    },
+    {
+      name: "BUG205-fix-timezone-offset",
+      status: "submitted",
+      link: "https://reposcout.slack.com/archives/C012ABCDE/p1717000000000300",
+    },
+    {
+      name: "PERF7-optimize-entries-query",
+      status: "submitted",
+      details: "Waiting on the staging benchmark before merge.",
+    },
+    {
+      name: "ZT9-investigate-flaky-test",
+      status: "dead_end",
+      details: "Root cause was a flaky CI runner, not app code; closing without a fix.",
+    },
+    {
+      name: "SUP19-customer-escalation-call",
+      status: "dead_end",
+      link: "https://reposcout.slack.com/archives/C012ABCDE/p1717000000000400",
+      details: "Customer churned before we could reproduce the issue.",
+    },
+    {
+      name: "UX8-design-calendar-heatmap",
+      status: "accepted",
+      details: "Shipped in v2; five-bucket intensity scale approved by the founder.",
+    },
+    {
+      name: "CORE7-reports-groupby-user",
+      status: "submitted",
+      link: "https://reposcout.slack.com/archives/C012ABCDE/p1717000000000500",
+      details: "PR up; awaiting review.",
+    },
+  ];
+  for (const w of wrapUps) {
+    const task = taskByName.get(w.name);
+    if (!task) continue;
+    repo.updateTask(
+      task.id,
+      { id: admin.id, role: "admin" },
+      { status: w.status, link: w.link, details: w.details }
+    );
+  }
 
   let entryCount = 0;
   const totalDays = 70; // 10 weeks
