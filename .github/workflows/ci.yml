@@ -1,0 +1,23 @@
+name: CI
+
+# Gates main (and any PR into it) on the full test suite + a production
+# build. Railway should be set to "Wait for CI" so a red run never deploys:
+# Railway service -> Settings -> Deploy -> check "Wait for CI".
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
