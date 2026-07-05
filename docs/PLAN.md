@@ -384,6 +384,14 @@ revisit only when invoicing becomes a real feature.
 Execution: T18 = schema + repo + API + CSV + tests. T19 = UI (day
 navigator, add-time dialog, wrap-up dialog, badges).
 
+Addendum (2026-07-05, T20): clicking a task name ANYWHERE opens the
+wrap-up dialog, both roles — dashboard Tasks + Entries tables, reports
+task grouping, timesheet row labels (Timer list already does). Members
+only ever see tasks they contributed to, so the existing
+contributor-or-admin PATCH authorization already fits. Report task
+groups additionally carry `details` so the dialog can prefill from any
+surface; each surface refetches after save.
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old
