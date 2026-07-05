@@ -24,6 +24,7 @@ import {
 } from "@/lib/format";
 import type { ReportGroup, ReportResult, TimeEntry, User } from "@/lib/types";
 import { EntryDialog } from "@/components/EntryDialog";
+import { StatusBadge } from "@/components/StatusBadge";
 import { useSession } from "@/components/SessionContext";
 import { UserSelect } from "@/components/UserSelect";
 import { useSortable, type SortableColumn, type SortController } from "@/components/useSortable";
@@ -63,6 +64,9 @@ const TASK_COLUMNS: Record<string, SortableColumn<ReportGroup>> = {
   hours: { accessor: (g) => g.hours, defaultDir: "desc" },
   contributors: { accessor: (g) => (g.contributors ?? []).length, defaultDir: "desc" },
   dates: { accessor: (g) => g.lastWorked ?? "", defaultDir: "desc" },
+  // Plain status-string accessor (v2.6): asc groups alphabetically
+  // (accepted, dead_end, open, submitted) which the plan explicitly OKs.
+  status: { accessor: (g) => g.status ?? "open", defaultDir: "asc" },
 };
 function taskTiebreak(a: ReportGroup, b: ReportGroup) {
   return a.name.localeCompare(b.name);
@@ -381,12 +385,26 @@ export default function DashboardPage() {
                     <SortTh label="Hours" sortKey="hours" controller={taskSort} numeric />
                     <SortTh label="Contributors" sortKey="contributors" controller={taskSort} />
                     <SortTh label="Dates" sortKey="dates" controller={taskSort} />
+                    <SortTh label="Status" sortKey="status" controller={taskSort} />
                   </tr>
                 </thead>
                 <tbody>
                   {taskSort.sorted.map((g) => (
                     <tr key={g.id}>
-                      <td className="mono">{g.name}</td>
+                      <td className="mono">
+                        {g.name}
+                        {g.link && (
+                          <a
+                            className="task-link-icon"
+                            href={g.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Task link"
+                          >
+                            ↗
+                          </a>
+                        )}
+                      </td>
                       <td className="num">{hoursLabel(g.hours * 3600)}</td>
                       <td className="muted">
                         {(g.contributors ?? [])
@@ -394,11 +412,14 @@ export default function DashboardPage() {
                           .join(", ") || "—"}
                       </td>
                       <td className="muted">{formatReportDates(g.dates)}</td>
+                      <td>
+                        <StatusBadge status={g.status ?? "open"} />
+                      </td>
                     </tr>
                   ))}
                   {(taskReport?.groups.length ?? 0) === 0 && (
                     <tr>
-                      <td colSpan={4} className="muted">
+                      <td colSpan={5} className="muted">
                         No entries in this range.
                       </td>
                     </tr>
@@ -408,6 +429,7 @@ export default function DashboardPage() {
                   <tr>
                     <td>Total</td>
                     <td className="num">{hoursLabel((taskReport?.totalHours ?? 0) * 3600)}</td>
+                    <td></td>
                     <td></td>
                     <td></td>
                   </tr>

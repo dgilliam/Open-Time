@@ -17,6 +17,7 @@ import {
   toIso,
 } from "@/lib/format";
 import type { ReportResult, User } from "@/lib/types";
+import { StatusBadge } from "@/components/StatusBadge";
 import { useSession } from "@/components/SessionContext";
 import { UserSelect } from "@/components/UserSelect";
 
@@ -196,7 +197,26 @@ export default function ReportsPage() {
               <tbody>
                 {result.groups.map((g) => (
                   <tr key={g.id}>
-                    <td className={groupBy === "task" ? "mono" : undefined}>{g.name}</td>
+                    <td className={groupBy === "task" ? "mono" : undefined}>
+                      {g.name}
+                      {groupBy === "task" && (
+                        <>
+                          {" "}
+                          <StatusBadge status={g.status ?? "open"} />
+                          {g.link && (
+                            <a
+                              className="task-link-icon"
+                              href={g.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Task link"
+                            >
+                              ↗
+                            </a>
+                          )}
+                        </>
+                      )}
+                    </td>
                     {groupBy === "user" && <td className="muted">{g.project ?? "—"}</td>}
                     {groupBy === "task" ? (
                       <td className="muted">{formatReportDates(g.dates)}</td>

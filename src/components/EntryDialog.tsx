@@ -1,11 +1,15 @@
 "use client";
 
-// Edit dialog for a time entry: task string (combobox) + start/stop
+// Edit/create dialog for a time entry: task string (combobox) + start/stop
 // datetime-local inputs. Shows the API's validation message inline (the
 // backend normalizes/validates the task string and re-rounds the duration).
+//
+// Edit mode: pass `entry`. Create mode (v2.6 section A, "+ Add time"): pass
+// `createDefaults` instead — prefilled start/stop for the viewed day, empty
+// task via TaskCombobox, saved via POST /api/entries.
 
 import { useState } from "react";
-import { ApiError, updateEntry } from "@/lib/api";
+import { ApiError, createEntry, updateEntry } from "@/lib/api";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/format";
 import type { TimeEntry } from "@/lib/types";
 import { Dialog } from "./Dialog";
@@ -13,16 +17,23 @@ import { TaskCombobox } from "./TaskCombobox";
 
 export function EntryDialog({
   entry,
+  createDefaults,
   onClose,
   onSaved,
 }: {
-  entry: TimeEntry;
+  entry?: TimeEntry;
+  createDefaults?: { startedAt: string; stoppedAt: string };
   onClose: () => void;
   onSaved: (entry: TimeEntry) => void;
 }) {
-  const [task, setTask] = useState(entry.taskName);
-  const [startedAt, setStartedAt] = useState(toDatetimeLocalValue(entry.startedAt));
-  const [stoppedAt, setStoppedAt] = useState(entry.stoppedAt ? toDatetimeLocalValue(entry.stoppedAt) : "");
+  const isCreate = !entry;
+  const [task, setTask] = useState(entry?.taskName ?? "");
+  const [startedAt, setStartedAt] = useState(
+    entry ? toDatetimeLocalValue(entry.startedAt) : createDefaults?.startedAt ?? ""
+  );
+  const [stoppedAt, setStoppedAt] = useState(
+    entry ? (entry.stoppedAt ? toDatetimeLocalValue(entry.stoppedAt) : "") : createDefaults?.stoppedAt ?? ""
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -31,12 +42,18 @@ export function EntryDialog({
     setError(null);
     setSaving(true);
     try {
-      const updated = await updateEntry(entry.id, {
-        task,
-        startedAt: fromDatetimeLocalValue(startedAt),
-        stoppedAt: stoppedAt ? fromDatetimeLocalValue(stoppedAt) : null,
-      });
-      onSaved(updated);
+      const saved = isCreate
+        ? await createEntry({
+            task,
+            startedAt: fromDatetimeLocalValue(startedAt),
+            stoppedAt: fromDatetimeLocalValue(stoppedAt),
+          })
+        : await updateEntry(entry.id, {
+            task,
+            startedAt: fromDatetimeLocalValue(startedAt),
+            stoppedAt: stoppedAt ? fromDatetimeLocalValue(stoppedAt) : null,
+          });
+      onSaved(saved);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "failed to save entry");
     } finally {
@@ -45,7 +62,7 @@ export function EntryDialog({
   }
 
   return (
-    <Dialog title="Edit entry" onClose={onClose}>
+    <Dialog title={isCreate ? "Add time" : "Edit entry"} onClose={onClose}>
       <form className="form" onSubmit={handleSubmit}>
         <label>
           Task

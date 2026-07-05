@@ -1,22 +1,28 @@
 "use client";
 
-// Today's completed entries: task, local start-stop times, rounded duration,
-// and edit/delete actions. Used on the Timer page.
+// Completed entries for the viewed day: task, local start-stop times,
+// rounded duration, and edit/delete actions. Used on the Timer page. Task
+// names are clickable (opens the wrap-up dialog, v2.6 section B) and show a
+// status badge when the task's status isn't the default "open" (keeps the
+// common case quiet).
 
 import { formatTime, hoursLabel } from "@/lib/format";
 import type { TimeEntry } from "@/lib/types";
+import { StatusBadge } from "@/components/StatusBadge";
 
 export function EntryList({
   entries,
   onEdit,
   onDelete,
+  onTaskClick,
 }: {
   entries: TimeEntry[];
   onEdit: (entry: TimeEntry) => void;
   onDelete: (id: string) => void;
+  onTaskClick?: (entry: TimeEntry) => void;
 }) {
   if (entries.length === 0) {
-    return <p className="muted">No completed entries yet today.</p>;
+    return <p className="muted">No completed entries.</p>;
   }
 
   return (
@@ -34,7 +40,21 @@ export function EntryList({
         <tbody>
           {entries.map((entry) => (
             <tr key={entry.id}>
-              <td className="mono">{entry.taskName}</td>
+              <td className="mono">
+                {onTaskClick ? (
+                  <button type="button" className="task-name-link" onClick={() => onTaskClick(entry)}>
+                    {entry.taskName}
+                  </button>
+                ) : (
+                  entry.taskName
+                )}
+                {entry.taskStatus !== "open" && (
+                  <>
+                    {" "}
+                    <StatusBadge status={entry.taskStatus} />
+                  </>
+                )}
+              </td>
               <td>{formatTime(entry.startedAt)}</td>
               <td>{entry.stoppedAt ? formatTime(entry.stoppedAt) : "—"}</td>
               <td className="num">{entry.durationSecs != null ? hoursLabel(entry.durationSecs) : "—"}</td>

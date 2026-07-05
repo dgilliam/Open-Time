@@ -1,43 +1,66 @@
 "use client";
 
-// Timer + today: task combobox / Start-Stop hero, plus today's completed
-// entries with edit/delete. AppShell guarantees a signed-in user by the time
-// this renders.
+// Timer + day navigator: task combobox / Start-Stop hero, plus the viewed
+// day's completed entries with edit/delete/add and the task wrap-up dialog
+// (v2.6). AppShell guarantees a signed-in user by the time this renders.
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, deleteEntry, getRunningEntry, listEntries, startTimer, stopTimer } from "@/lib/api";
-import { pluralCount, startOfDay, toIso } from "@/lib/format";
+import { addDays, pluralCount, startOfDay, toIso } from "@/lib/format";
 import type { TimeEntry } from "@/lib/types";
+import { DayNav } from "@/components/DayNav";
 import { EntryDialog } from "@/components/EntryDialog";
 import { EntryList } from "@/components/EntryList";
+import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { TimerBar } from "@/components/TimerBar";
+
+/** Local 09:00 / 09:30 of `day`, formatted for the <input type="datetime-local"> defaults. */
+function defaultAddTimeRange(day: Date): { startedAt: string; stoppedAt: string } {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const y = day.getFullYear();
+  const m = pad(day.getMonth() + 1);
+  const d = pad(day.getDate());
+  return { startedAt: `${y}-${m}-${d}T09:00:00`, stoppedAt: `${y}-${m}-${d}T09:30:00` };
+}
 
 export default function Home() {
   const [running, setRunning] = useState<TimeEntry | null>(null);
   const [taskInput, setTaskInput] = useState("");
-  const [todayEntries, setTodayEntries] = useState<TimeEntry[]>([]);
+  const [day, setDay] = useState<Date>(() => startOfDay(new Date()));
+  const [dayEntries, setDayEntries] = useState<TimeEntry[]>([]);
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<TimeEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [wrapUp, setWrapUp] = useState<TimeEntry | null>(null);
   const [ready, setReady] = useState(false);
 
-  const loadToday = useCallback(async () => {
-    const from = toIso(startOfDay(new Date()));
-    const entries = await listEntries({ from });
-    setTodayEntries(entries.filter((e) => e.stoppedAt !== null));
+  const loadDay = useCallback(async (viewedDay: Date) => {
+    const from = toIso(startOfDay(viewedDay));
+    const to = toIso(addDays(startOfDay(viewedDay), 1));
+    const entries = await listEntries({ from, to });
+    setDayEntries(entries.filter((e) => e.stoppedAt !== null));
   }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const [runningEntry] = await Promise.all([getRunningEntry(), loadToday()]);
+        const [runningEntry] = await Promise.all([getRunningEntry(), loadDay(day)]);
         setRunning(runningEntry);
       } finally {
         setReady(true);
       }
     })();
-  }, [loadToday]);
+    // Only run once on mount for the running-timer fetch; day changes are
+    // handled by the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    loadDay(day);
+  }, [day, ready, loadDay]);
 
   async function handleStart() {
     setError(null);
@@ -46,7 +69,7 @@ export default function Home() {
       const entry = await startTimer({ task: taskInput });
       setRunning(entry);
       setTaskInput("");
-      await loadToday();
+      await loadDay(day);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "failed to start timer");
     } finally {
@@ -58,9 +81,12 @@ export default function Home() {
     setError(null);
     setStopping(true);
     try {
-      await stopTimer();
+      const stopped = await stopTimer();
       setRunning(null);
-      await loadToday();
+      await loadDay(day);
+      // Stopping is never blocked on the wrap-up dialog — the idle UI above
+      // is already committed by the time this opens.
+      setWrapUp(stopped);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "failed to stop timer");
     } finally {
@@ -70,7 +96,7 @@ export default function Home() {
 
   async function handleDelete(id: string) {
     await deleteEntry(id);
-    await loadToday();
+    await loadDay(day);
   }
 
   if (!ready) return null;
@@ -90,9 +116,20 @@ export default function Home() {
       />
       <section className="section">
         <h2>
-          Today <span className="table-count">{pluralCount(todayEntries.length, "entry", "entries")}</span>
+          Entries <span className="table-count">{pluralCount(dayEntries.length, "entry", "entries")}</span>
         </h2>
-        <EntryList entries={todayEntries} onEdit={setEditing} onDelete={handleDelete} />
+        <div className="toolbar">
+          <DayNav day={day} onChange={setDay} />
+          <button type="button" className="btn" onClick={() => setAdding(true)}>
+            + Add time
+          </button>
+        </div>
+        <EntryList
+          entries={dayEntries}
+          onEdit={setEditing}
+          onDelete={handleDelete}
+          onTaskClick={(entry) => setWrapUp(entry)}
+        />
       </section>
       {editing && (
         <EntryDialog
@@ -100,7 +137,31 @@ export default function Home() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            loadToday();
+            loadDay(day);
+          }}
+        />
+      )}
+      {adding && (
+        <EntryDialog
+          createDefaults={defaultAddTimeRange(day)}
+          onClose={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false);
+            loadDay(day);
+          }}
+        />
+      )}
+      {wrapUp && (
+        <TaskWrapUpDialog
+          taskId={wrapUp.taskId}
+          taskName={wrapUp.taskName}
+          status={wrapUp.taskStatus}
+          link={wrapUp.taskLink}
+          details={wrapUp.taskDetails}
+          onClose={() => setWrapUp(null)}
+          onSaved={() => {
+            setWrapUp(null);
+            loadDay(day);
           }}
         />
       )}

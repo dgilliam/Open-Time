@@ -161,6 +161,19 @@ export function formatHoursMinutes(totalSeconds: number): string {
 }
 
 /**
+ * Label for the Timer page's day navigator (v2.6): "Today" when `date` is
+ * the same local day as `now`, otherwise a short weekday + date, e.g. "Thu,
+ * Jul 3".
+ */
+export function formatDayLabel(date: Date, now: Date = new Date()): string {
+  const a = startOfDay(date);
+  const b = startOfDay(now);
+  if (a.getTime() === b.getTime()) return "Today";
+  const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
+  return `${weekday}, ${formatShortDate(date)}`;
+}
+
+/**
  * Compact display for a report task-group's worked dates: listed when there
  * are 3 or fewer ("Jul 1, Jul 2"), otherwise a range + count
  * ("Jun 29 – Jul 4 · 5 days").

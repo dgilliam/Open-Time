@@ -391,6 +391,22 @@ select:focus {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
+textarea {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
 input[type="color"] {
   width: 2.5rem;
   height: var(--control-height);
@@ -691,6 +707,63 @@ tfoot td {
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+/* ---------- status badge (v2.6 task wrap-up) ---------- */
+
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.status-badge-open {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.status-badge-submitted {
+  background: color-mix(in srgb, #b45309 18%, var(--surface));
+  color: #b45309;
+}
+
+.status-badge-accepted {
+  background: color-mix(in srgb, #15803d 18%, var(--surface));
+  color: #15803d;
+}
+
+.status-badge-dead-end {
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+  color: var(--danger);
+}
+
+.task-link-icon {
+  margin-left: 0.35rem;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.task-link-icon:hover {
+  color: var(--accent);
+}
+
+.task-name-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-underline-offset: 2px;
+}
+
+.task-name-link:hover {
+  text-decoration: underline;
 }
 
 /* ---------- dialog ---------- */
