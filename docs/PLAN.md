@@ -56,10 +56,16 @@ time_entries(id TEXT PK,
              created_at TEXT NOT NULL)
 ```
 
-Task name validation: trimmed, 3–120 chars, must match
-`^[A-Za-z0-9]+-[A-Za-z0-9][A-Za-z0-9-]*$` (slug, dash, kebab rest); the
-slug segment is uppercased on save, the rest lowercased. Reject with a
-helpful 400 otherwise.
+Task name rules (relaxed 2026-07-05 — the strict SLUG-only format was
+rejecting legitimate free-text tasks like "internal meeting"):
+- Trimmed, internal whitespace runs collapsed to one space, 2–120 chars;
+  outside that → 400.
+- If the name matches `^[A-Za-z0-9]+-[A-Za-z0-9][A-Za-z0-9-]*$` it is
+  treated as a slug task and normalized (slug uppercased, rest
+  lowercased), preserving the original ticket-style behavior.
+- Anything else is accepted verbatim as free text (casing preserved).
+- Find-or-create matches case-insensitively so "Internal Meeting" and
+  "internal meeting" are one task (first-seen casing wins).
 
 Rounding rule (applied on manual create/update and on timer stop):
 `duration_secs = max(1800, round(rawSeconds / 1800) * 1800)`.
