@@ -129,6 +129,7 @@ export default function Home() {
           onEdit={setEditing}
           onDelete={handleDelete}
           onTaskClick={(entry) => setWrapUp(entry)}
+          onStatusSaved={() => loadDay(day)}
         />
       </section>
       {editing && (

@@ -438,7 +438,12 @@ export default function DashboardPage() {
                       </td>
                       <td className="muted">{formatReportDates(g.dates)}</td>
                       <td>
-                        <StatusBadge status={g.status ?? "open"} />
+                        <StatusBadge
+                          status={g.status ?? "open"}
+                          taskId={g.id}
+                          onSaved={loadAll}
+                          onError={(message) => setError(message)}
+                        />
                       </td>
                     </tr>
                   ))}

@@ -742,6 +742,29 @@ tfoot td {
   color: var(--danger);
 }
 
+/* ---------- status badge, interactive (v2.6 T21 addendum) ---------- */
+
+.status-badge-interactive {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.status-badge-interactive:hover:not(:disabled) {
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+.status-badge-interactive:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.status-badge-interactive:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .task-link-icon {
   margin-left: 0.35rem;
   color: var(--muted);

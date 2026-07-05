@@ -15,11 +15,15 @@ export function EntryList({
   onEdit,
   onDelete,
   onTaskClick,
+  onStatusSaved,
 }: {
   entries: TimeEntry[];
   onEdit: (entry: TimeEntry) => void;
   onDelete: (id: string) => void;
   onTaskClick?: (entry: TimeEntry) => void;
+  /** Refetch callback for the status badge (v2.6 T21 addendum); called after
+   * a successful in-place status cycle. */
+  onStatusSaved?: () => void;
 }) {
   if (entries.length === 0) {
     return <p className="muted">No completed entries.</p>;
@@ -51,7 +55,11 @@ export function EntryList({
                 {entry.taskStatus !== "open" && (
                   <>
                     {" "}
-                    <StatusBadge status={entry.taskStatus} />
+                    <StatusBadge
+                      status={entry.taskStatus}
+                      taskId={entry.taskId}
+                      onSaved={onStatusSaved}
+                    />
                   </>
                 )}
               </td>

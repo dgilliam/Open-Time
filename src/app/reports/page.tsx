@@ -238,7 +238,12 @@ export default function ReportsPage() {
                       {groupBy === "task" && (
                         <>
                           {" "}
-                          <StatusBadge status={g.status ?? "open"} />
+                          <StatusBadge
+                            status={g.status ?? "open"}
+                            taskId={g.id}
+                            onSaved={loadReport}
+                            onError={(message) => setError(message)}
+                          />
                           {g.link && (
                             <a
                               className="task-link-icon"
