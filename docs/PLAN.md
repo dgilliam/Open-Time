@@ -236,7 +236,27 @@ scrolls inside its own container, never the page.
   under 640px.
 - **No functional changes** — same pages, same data, same tests.
 
-## Design system (v2 restyle, 2026-07-04)
+## v2.4 — CSV export from /reports (2026-07-05)
+
+Purpose: founder models the data in Google Sheets. Flat entry-level CSV,
+available to BOTH roles from the /reports page, honoring the page's
+active filters.
+
+- GET `/api/reports/csv?from=&to=&userId=` — requireUser;
+  `userId` defaults to self; members may only target themselves
+  (assertSelfOrAdmin, same as everywhere); admin may pass any user id or
+  `all`. Completed entries only, ordered by date asc then member name.
+- Columns exactly: `member,task,duration_hours,date` — duration as
+  decimal hours (0.5, 2.5), date as YYYY-MM-DD (local bucketing,
+  consistent with calendar/reports). No start/stop times.
+- Content-Type text/csv, Content-Disposition attachment, filename
+  `opentime_<from>_<to>.csv` (dates only). Proper quoting for commas/
+  quotes/newlines in free-text task names.
+- /reports UI: secondary "Export CSV" button in the toolbar (plain <a>
+  so the session cookie rides along). URL reflects the CURRENT view:
+  task grouping → the viewed user (self for members, selected person
+  for admin); user grouping (admin-only) → `all`. Range = the active
+  preset/custom From–To exactly as displayed in the date boxes.
 
 Written from scratch in our own CSS, visually inspired by cal.com's design
 language (their code is AGPL — never copy styles from their repo). All
