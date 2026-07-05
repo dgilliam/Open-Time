@@ -197,6 +197,10 @@ export default function DashboardPage() {
   const entrySort = useSortable(displayedEntries, ENTRY_COLUMNS, entryTiebreak);
   // Cap applies AFTER sorting, per plan addendum.
   const cappedEntries = entrySort.sorted.slice(0, ENTRIES_CAP);
+  const displayedTotalSecs = useMemo(
+    () => displayedEntries.reduce((sum, e) => sum + (e.durationSecs ?? 0), 0),
+    [displayedEntries]
+  );
   const isCapped = entrySort.sorted.length > ENTRIES_CAP;
 
   const activeContributors = userReport?.groups.filter((g) => g.hours > 0).length ?? 0;
@@ -424,6 +428,16 @@ export default function DashboardPage() {
                     </tr>
                   )}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    {/* Sums every entry matching the member + date filters,
+                        not just the 200 rendered rows — the count note above
+                        explains the difference when the cap is active. */}
+                    <td colSpan={5}>Total</td>
+                    <td className="num">{hoursLabel(displayedTotalSecs)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </section>
