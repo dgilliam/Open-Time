@@ -88,12 +88,16 @@ export function deleteSession(token: string | undefined | null): void {
   db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(hashToken(token));
 }
 
+// Railway (and any HTTPS host) serves TLS in production, so the cookie can be
+// marked secure there; local `npm start` over plain http on non-Chromium
+// browsers may reject a secure cookie — use `npm run dev` locally instead.
 export function setSessionCookie(res: NextResponse, token: string): void {
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_DAYS * 24 * 60 * 60,
+    secure: process.env.NODE_ENV === "production",
   });
 }
 
@@ -103,6 +107,7 @@ export function clearSessionCookie(res: NextResponse): void {
     sameSite: "lax",
     path: "/",
     maxAge: 0,
+    secure: process.env.NODE_ENV === "production",
   });
 }
 

@@ -70,13 +70,19 @@ there is no self-registration.
   `src/lib/repo.ts`.
 - **Auth**: email + password (scrypt via `node:crypto`), httpOnly session
   cookie whose token is stored only as a SHA-256 hash. Route guards in
-  `src/lib/auth.ts`. Note: the session cookie should gain `secure: true`
-  when deployed behind HTTPS.
+  `src/lib/auth.ts`. The cookie is `secure` automatically in production
+  (`NODE_ENV=production`), which is why local production testing needs a
+  real HTTPS host — see `DEPLOY.md`.
 - **API shape**: `{ "data": ... }` on success, `{ "error": "message" }`
   with 400/401/403/404/409 on failure. Full contract in `docs/PLAN.md`.
 - **Rounding**: `duration_secs = max(0.5h, nearest 0.5h)` computed at
   save; raw start/stop timestamps are preserved, so the rounding policy
   can change later without data loss.
+
+## Deploying
+
+For a production deploy on Railway (volume, env vars, backups, restore),
+see [`DEPLOY.md`](./DEPLOY.md).
 
 ## Roadmap: SaaS-ready, not SaaS
 
