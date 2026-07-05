@@ -279,6 +279,17 @@ colors can be swapped in one place later.
   muted headers, 1px separators, right-aligned tabular-nums numerics.
 - Nav: subtle-surface sidebar, 1px right border, soft-pill links.
 
+### v2.4 addendum (2026-07-05): dashboard entries export
+
+The /dashboard Entries section gets its own "Export CSV" button, honoring
+ALL of that section's active filters: date range, member, and project.
+To support it, GET `/api/reports/csv` gains an optional `project` param
+(admin-relevant): `project=<label>` filters to members currently
+assigned that label; the sentinel `project=__none__` filters to
+unassigned members; absent = no project filter. Implemented as a
+`project` option on `listEntries` (string match / explicit-null / off).
+Same columns and auth rules as v2.4.
+
 ## v2.5 — Member project assignment (2026-07-05)
 
 Projects return in deliberately minimal form: a project is a text label
