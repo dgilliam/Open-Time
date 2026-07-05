@@ -621,6 +621,49 @@ tfoot td {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* ---------- click-to-sort table headers (v2.2 addendum) ---------- */
+
+th.sortable {
+  padding: 0;
+}
+
+th.sortable button {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+th.sortable button:hover,
+th.sortable button:focus-visible {
+  color: var(--accent);
+}
+
+th.sortable button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+th.num.sortable button {
+  justify-content: flex-end;
+}
+
+.sort-indicator {
+  display: inline-block;
+  flex: none;
+  width: 0.75em;
+  text-align: center;
+  font-size: 0.7rem;
+}
+
 /* ---------- auth pages (login / setup) ---------- */
 
 .auth-shell {

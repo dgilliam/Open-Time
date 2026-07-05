@@ -22,12 +22,75 @@ import {
   startOfWeek,
   toIso,
 } from "@/lib/format";
-import type { ReportResult, TimeEntry, User } from "@/lib/types";
+import type { ReportGroup, ReportResult, TimeEntry, User } from "@/lib/types";
 import { EntryDialog } from "@/components/EntryDialog";
 import { useSession } from "@/components/SessionContext";
 import { UserSelect } from "@/components/UserSelect";
+import { useSortable, type SortableColumn, type SortController } from "@/components/useSortable";
 
 const ENTRIES_CAP = 200;
+
+interface ContributorRow {
+  user: User;
+  hours: number;
+  activeDays: number;
+  lastWorked: string | null;
+}
+
+// Column configs for the three dashboard tables' click-to-sort headers
+// (docs/PLAN.md v2.2 addendum, 2026-07-05): text columns default asc,
+// numeric/date columns default desc on first click.
+const TEAM_COLUMNS: Record<string, SortableColumn<ContributorRow>> = {
+  name: { accessor: (r) => r.user.name, defaultDir: "asc" },
+  hours: { accessor: (r) => r.hours, defaultDir: "desc" },
+  activeDays: { accessor: (r) => r.activeDays, defaultDir: "desc" },
+  lastWorked: { accessor: (r) => r.lastWorked ?? "", defaultDir: "desc" },
+};
+function teamTiebreak(a: ContributorRow, b: ContributorRow) {
+  return a.user.name.localeCompare(b.user.name);
+}
+
+const TASK_COLUMNS: Record<string, SortableColumn<ReportGroup>> = {
+  task: { accessor: (g) => g.name, defaultDir: "asc" },
+  hours: { accessor: (g) => g.hours, defaultDir: "desc" },
+  contributors: { accessor: (g) => (g.contributors ?? []).length, defaultDir: "desc" },
+  dates: { accessor: (g) => g.lastWorked ?? "", defaultDir: "desc" },
+};
+function taskTiebreak(a: ReportGroup, b: ReportGroup) {
+  return a.name.localeCompare(b.name);
+}
+
+const ENTRY_COLUMNS: Record<string, SortableColumn<TimeEntry>> = {
+  member: { accessor: (e) => e.userName, defaultDir: "asc" },
+  task: { accessor: (e) => e.taskName, defaultDir: "asc" },
+  date: { accessor: (e) => e.startedAt, defaultDir: "desc" },
+  duration: { accessor: (e) => e.durationSecs ?? -1, defaultDir: "desc" },
+};
+function entryTiebreak(a: TimeEntry, b: TimeEntry) {
+  return a.userName.localeCompare(b.userName);
+}
+
+/** Clickable th: button + reserved-width ▲/▼ indicator, aria-sort on the active column. */
+function SortTh({
+  label,
+  sortKey,
+  controller,
+  numeric,
+}: {
+  label: string;
+  sortKey: string;
+  controller: SortController;
+  numeric?: boolean;
+}) {
+  return (
+    <th className={numeric ? "num sortable" : "sortable"} aria-sort={controller.ariaSort(sortKey)}>
+      <button type="button" onClick={() => controller.toggle(sortKey)}>
+        {label}
+        <span className="sort-indicator">{controller.indicator(sortKey) ?? ""}</span>
+      </button>
+    </th>
+  );
+}
 
 type Preset = "this-week" | "last-week" | "this-month" | "last-30" | "custom";
 
@@ -111,8 +174,6 @@ export default function DashboardPage() {
     () => (entriesFilter === "all" ? allEntries : allEntries.filter((e) => e.userId === entriesFilter)),
     [allEntries, entriesFilter]
   );
-  const cappedEntries = displayedEntries.slice(0, ENTRIES_CAP);
-  const isCapped = displayedEntries.length > ENTRIES_CAP;
 
   const contributorRows = useMemo(() => {
     const byUserId = new Map((userReport?.groups ?? []).map((g) => [g.id, g]));
@@ -128,6 +189,15 @@ export default function DashboardPage() {
       })
       .sort((a, b) => b.hours - a.hours || a.user.name.localeCompare(b.user.name));
   }, [users, userReport]);
+
+  const taskRows = useMemo(() => taskReport?.groups ?? [], [taskReport]);
+
+  const teamSort = useSortable(contributorRows, TEAM_COLUMNS, teamTiebreak);
+  const taskSort = useSortable(taskRows, TASK_COLUMNS, taskTiebreak);
+  const entrySort = useSortable(displayedEntries, ENTRY_COLUMNS, entryTiebreak);
+  // Cap applies AFTER sorting, per plan addendum.
+  const cappedEntries = entrySort.sorted.slice(0, ENTRIES_CAP);
+  const isCapped = entrySort.sorted.length > ENTRIES_CAP;
 
   const activeContributors = userReport?.groups.filter((g) => g.hours > 0).length ?? 0;
 
@@ -216,14 +286,14 @@ export default function DashboardPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th className="num">Hours</th>
-                    <th className="num">Active days</th>
-                    <th>Last worked</th>
+                    <SortTh label="Name" sortKey="name" controller={teamSort} />
+                    <SortTh label="Hours" sortKey="hours" controller={teamSort} numeric />
+                    <SortTh label="Active days" sortKey="activeDays" controller={teamSort} numeric />
+                    <SortTh label="Last worked" sortKey="lastWorked" controller={teamSort} />
                   </tr>
                 </thead>
                 <tbody>
-                  {contributorRows.map((row) => (
+                  {teamSort.sorted.map((row) => (
                     <tr key={row.user.id}>
                       <td className="strong">{row.user.name}</td>
                       <td className="num">{hoursLabel(row.hours * 3600)}</td>
@@ -255,14 +325,14 @@ export default function DashboardPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Task</th>
-                    <th className="num">Hours</th>
-                    <th>Contributors</th>
-                    <th>Dates</th>
+                    <SortTh label="Task" sortKey="task" controller={taskSort} />
+                    <SortTh label="Hours" sortKey="hours" controller={taskSort} numeric />
+                    <SortTh label="Contributors" sortKey="contributors" controller={taskSort} />
+                    <SortTh label="Dates" sortKey="dates" controller={taskSort} />
                   </tr>
                 </thead>
                 <tbody>
-                  {(taskReport?.groups ?? []).map((g) => (
+                  {taskSort.sorted.map((g) => (
                     <tr key={g.id}>
                       <td className="mono">{g.name}</td>
                       <td className="num">{hoursLabel(g.hours * 3600)}</td>
@@ -310,12 +380,12 @@ export default function DashboardPage() {
               <table className="entry-table">
                 <thead>
                   <tr>
-                    <th>Member</th>
-                    <th>Task</th>
-                    <th>Date</th>
+                    <SortTh label="Member" sortKey="member" controller={entrySort} />
+                    <SortTh label="Task" sortKey="task" controller={entrySort} />
+                    <SortTh label="Date" sortKey="date" controller={entrySort} />
                     <th>Start</th>
                     <th>Stop</th>
-                    <th className="num">Duration</th>
+                    <SortTh label="Duration" sortKey="duration" controller={entrySort} numeric />
                     <th aria-hidden="true"></th>
                   </tr>
                 </thead>
