@@ -406,6 +406,32 @@ contributor-or-admin PATCH authorization already fits. Report task
 groups additionally carry `details` so the dialog can prefill from any
 surface; each surface refetches after save.
 
+## v2.7 — Remove (soft-delete) members (2026-07-05)
+
+"Delete member" is a SOFT remove — history must never be rewritten by
+offboarding. `users.deleted_at TEXT NULL` (additive migration via the
+existing addColumnIfMissing helper).
+
+Semantics:
+- Removed members cannot log in (auth lookup excludes deleted) and their
+  existing sessions stop resolving immediately (session join excludes
+  deleted).
+- Hidden from `listUsers` by default and from every picker/filter/Team
+  stat surface; `listUsers({includeRemoved:true})` (admin route param
+  `?includeRemoved=1`) returns them flagged for the Team page's "Show
+  removed" toggle.
+- All historical entries/reports/CSV rows keep their name and data —
+  joins unchanged. Dashboard Team table shows active members only;
+  a removed member's entries still appear in Tasks/Entries/exports.
+- DELETE `/api/users/[id]` — admin only; 400 when targeting yourself;
+  soft-removes + deletes the member's sessions rows. PATCH gains
+  `restore: true` (admin only) to bring someone back.
+- Adding a NEW member with a removed member's email → 400 with a
+  message pointing at restore (email uniqueness is global).
+- Team page: per-row "Remove" (confirm dialog with the member's name);
+  "Show removed" checkbox reveals removed rows greyed out with a
+  Restore action.
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old
