@@ -198,6 +198,89 @@ describe("PATCH /api/users/[id] authorization (admin only, v2.5)", () => {
   });
 });
 
+describe("DELETE /api/users/[id] and restore (admin only, v2.7 soft-delete)", () => {
+  it("403s a member", async () => {
+    const res = await userByIdRoute.DELETE(
+      req(`/api/users/${userB.id}`, { method: "DELETE", token: tokenA }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("401s with no session", async () => {
+    const res = await userByIdRoute.DELETE(req(`/api/users/${userB.id}`, { method: "DELETE" }), {
+      params: Promise.resolve({ id: userB.id }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("400s an admin targeting themselves", async () => {
+    const res = await userByIdRoute.DELETE(
+      req(`/api/users/${admin.id}`, { method: "DELETE", token: adminToken }),
+      { params: Promise.resolve({ id: admin.id }) }
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("200s an admin removing a member; the member's login and session stop resolving", async () => {
+    const res = await userByIdRoute.DELETE(
+      req(`/api/users/${userB.id}`, { method: "DELETE", token: adminToken }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(200);
+
+    // The member's live session (tokenB, created in beforeEach) must stop
+    // resolving immediately.
+    expect(auth.getSessionUser(tokenB)).toBeNull();
+    expect(repo.getUserAuthByEmail("bob@example.com")).toBeNull();
+  });
+
+  it("GET /api/users?includeRemoved=1 includes the removed row, flagged", async () => {
+    await userByIdRoute.DELETE(req(`/api/users/${userB.id}`, { method: "DELETE", token: adminToken }), {
+      params: Promise.resolve({ id: userB.id }),
+    });
+
+    const defaultRes = await usersRoute.GET(req("/api/users", { token: adminToken }));
+    const defaultJson = await defaultRes.json();
+    expect(defaultJson.data.map((u: { id: string }) => u.id)).not.toContain(userB.id);
+
+    const includeRes = await usersRoute.GET(
+      req("/api/users?includeRemoved=1", { token: adminToken })
+    );
+    expect(includeRes.status).toBe(200);
+    const includeJson = await includeRes.json();
+    const removedRow = includeJson.data.find((u: { id: string }) => u.id === userB.id);
+    expect(removedRow).toBeTruthy();
+    expect(removedRow.deletedAt).not.toBeNull();
+  });
+
+  it("PATCH {restore: true} brings a removed member back (admin only)", async () => {
+    await userByIdRoute.DELETE(req(`/api/users/${userB.id}`, { method: "DELETE", token: adminToken }), {
+      params: Promise.resolve({ id: userB.id }),
+    });
+
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/${userB.id}`, { method: "PATCH", token: adminToken, body: { restore: true } }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.deletedAt).toBeNull();
+    expect(repo.getUserAuthByEmail("bob@example.com")).not.toBeNull();
+  });
+
+  it("a removed member's entries still appear via GET /api/entries?userId=all", async () => {
+    await userByIdRoute.DELETE(req(`/api/users/${userB.id}`, { method: "DELETE", token: adminToken }), {
+      params: Promise.resolve({ id: userB.id }),
+    });
+
+    const res = await entriesRoute.GET(req(`/api/entries?userId=all`, { token: adminToken }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.some((e: { userId: string }) => e.userId === userB.id)).toBe(true);
+  });
+});
+
 describe("GET /api/reports groupBy=user authorization (admin only)", () => {
   it("403s a member", async () => {
     const res = await reportsRoute.GET(req("/api/reports?groupBy=user", { token: tokenA }));

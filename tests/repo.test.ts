@@ -157,6 +157,123 @@ describe("updateUser", () => {
   });
 });
 
+describe("removeUser / restoreUser (v2.7 soft-delete)", () => {
+  it("excludes removed members from listUsers by default", () => {
+    repo.removeUser(userB.id, admin.id);
+    const users = repo.listUsers();
+    expect(users.map((u) => u.id)).not.toContain(userB.id);
+    expect(users.length).toBe(2);
+  });
+
+  it("includeRemoved returns removed members too, flagged with deletedAt", () => {
+    repo.removeUser(userB.id, admin.id);
+    const users = repo.listUsers({ includeRemoved: true });
+    expect(users.length).toBe(3);
+    const removed = users.find((u) => u.id === userB.id)!;
+    expect(removed.deletedAt).not.toBeNull();
+    const active = users.find((u) => u.id === userA.id)!;
+    expect(active.deletedAt).toBeNull();
+  });
+
+  it("blocks login (getUserAuthByEmail) for a removed member", () => {
+    expect(repo.getUserAuthByEmail("bob@example.com")).not.toBeNull();
+    repo.removeUser(userB.id, admin.id);
+    expect(repo.getUserAuthByEmail("bob@example.com")).toBeNull();
+  });
+
+  it("deletes the removed member's sessions rows in the same transaction", () => {
+    const { token } = auth.createSession(userB.id);
+    expect(auth.getSessionUser(token)?.id).toBe(userB.id);
+
+    repo.removeUser(userB.id, admin.id);
+
+    const sessionRows = db.prepare("SELECT COUNT(*) as c FROM sessions WHERE user_id = ?").get(userB.id) as {
+      c: number;
+    };
+    expect(sessionRows.c).toBe(0);
+    expect(auth.getSessionUser(token)).toBeNull();
+  });
+
+  it("400s when an admin targets themselves", () => {
+    expectApiError(() => repo.removeUser(admin.id, admin.id), 400);
+  });
+
+  it("404s for an unknown user", () => {
+    expectApiError(() => repo.removeUser("nope", admin.id), 404);
+  });
+
+  it("restore clears deletedAt and brings the member back into listUsers", () => {
+    repo.removeUser(userB.id, admin.id);
+    expect(repo.listUsers().map((u) => u.id)).not.toContain(userB.id);
+
+    const restored = repo.restoreUser(userB.id);
+    expect(restored.deletedAt).toBeNull();
+    expect(repo.listUsers().map((u) => u.id)).toContain(userB.id);
+  });
+
+  it("restore re-enables login", () => {
+    repo.removeUser(userB.id, admin.id);
+    expect(repo.getUserAuthByEmail("bob@example.com")).toBeNull();
+    repo.restoreUser(userB.id);
+    expect(repo.getUserAuthByEmail("bob@example.com")).not.toBeNull();
+  });
+
+  it("404s restoring an unknown user", () => {
+    expectApiError(() => repo.restoreUser("nope"), 404);
+  });
+
+  it("creating a new member with a removed member's email 400s pointing at restore", () => {
+    repo.removeUser(userB.id, admin.id);
+    expectApiError(
+      () =>
+        repo.createUser({
+          name: "New Bob",
+          email: "bob@example.com",
+          password: "password123",
+          role: "member",
+        }),
+      400
+    );
+    try {
+      repo.createUser({
+        name: "New Bob",
+        email: "bob@example.com",
+        password: "password123",
+        role: "member",
+      });
+      expect.fail("should have thrown");
+    } catch (err) {
+      expect((err as InstanceType<typeof ApiError>).message).toBe(
+        "email belongs to a removed member — restore them instead"
+      );
+    }
+  });
+
+  it("still 400s (plain message) for an active member's email conflict", () => {
+    try {
+      repo.createUser({ name: "Dup", email: "bob@example.com", password: "password123", role: "member" });
+      expect.fail("should have thrown");
+    } catch (err) {
+      expect((err as InstanceType<typeof ApiError>).message).toBe("email already in use");
+    }
+  });
+
+  it("a removed member's entries are preserved and still returned by listEntries", () => {
+    repo.createEntry({
+      userId: userB.id,
+      task: "ab99-history-preserved",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+
+    repo.removeUser(userB.id, admin.id);
+
+    const entries = repo.listEntries({ userId: "all" }).filter((e) => e.taskName === "AB99-history-preserved");
+    expect(entries.length).toBe(1);
+    expect(entries[0].userName).toBe("Bob");
+  });
+});
+
 describe("task name validation and normalization", () => {
   it("normalizes the slug to uppercase and the rest to lowercase", () => {
     expect(repo.normalizeTaskName("gm7vkndn9y3f-OTP-Resend-Onboarding")).toBe(
