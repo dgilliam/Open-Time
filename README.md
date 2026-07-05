@@ -44,7 +44,10 @@ there is no self-registration.
   GitHub-style 12-month activity heatmap.
 - **Reports** — hours by task over a date range; admin can view any
   member or group by user.
-- **Team** (admin) — member list + add member.
+- **Team** (admin) — member list + add member. Admin can assign each member
+  an optional project label (edit action per row); the project shows up in
+  the admin dashboard and reports tables and in CSV exports, but is
+  invisible to the member themselves.
 
 ## Commands
 

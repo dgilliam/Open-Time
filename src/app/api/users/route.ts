@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
       email: body?.email,
       password: body?.password,
       role: "member",
+      project: body?.project,
     });
     return NextResponse.json({ data: user }, { status: 201 });
   } catch (err) {

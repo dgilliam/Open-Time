@@ -188,6 +188,7 @@ export default function ReportsPage() {
               <thead>
                 <tr>
                   <th>{groupBy === "task" ? "Task" : "User"}</th>
+                  {groupBy === "user" && <th>Project</th>}
                   {groupBy === "task" ? <th>Dates</th> : <th className="num">Tasks</th>}
                   <th className="num">Hours</th>
                 </tr>
@@ -196,6 +197,7 @@ export default function ReportsPage() {
                 {result.groups.map((g) => (
                   <tr key={g.id}>
                     <td className={groupBy === "task" ? "mono" : undefined}>{g.name}</td>
+                    {groupBy === "user" && <td className="muted">{g.project ?? "—"}</td>}
                     {groupBy === "task" ? (
                       <td className="muted">{formatReportDates(g.dates)}</td>
                     ) : (
@@ -206,7 +208,7 @@ export default function ReportsPage() {
                 ))}
                 {result.groups.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="muted">
+                    <td colSpan={groupBy === "user" ? 4 : 3} className="muted">
                       No entries in this range.
                     </td>
                   </tr>
@@ -215,6 +217,7 @@ export default function ReportsPage() {
               <tfoot>
                 <tr>
                   <td>Total</td>
+                  {groupBy === "user" && <td></td>}
                   {groupBy === "task" ? (
                     <td></td>
                   ) : (

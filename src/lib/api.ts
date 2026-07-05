@@ -64,8 +64,17 @@ export function listUsers(): Promise<User[]> {
   return request<User[]>("/api/users");
 }
 
-export function createUser(input: { name: string; email: string; password: string }): Promise<User> {
+export function createUser(input: {
+  name: string;
+  email: string;
+  password: string;
+  project?: string | null;
+}): Promise<User> {
   return request<User>("/api/users", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateUser(id: string, patch: { name?: string; project?: string | null }): Promise<User> {
+  return request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 
 // ---------- tasks ----------

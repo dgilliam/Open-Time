@@ -19,6 +19,7 @@ const auth = await import("../src/lib/auth");
 const entriesRoute = await import("../src/app/api/entries/route");
 const calendarRoute = await import("../src/app/api/calendar/route");
 const usersRoute = await import("../src/app/api/users/route");
+const userByIdRoute = await import("../src/app/api/users/[id]/route");
 const reportsRoute = await import("../src/app/api/reports/route");
 const reportsCsvRoute = await import("../src/app/api/reports/csv/route");
 const tasksRoute = await import("../src/app/api/tasks/route");
@@ -27,10 +28,18 @@ function resetDb() {
   db.exec("DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM sessions; DELETE FROM users;");
 }
 
-function req(url: string, opts: { token?: string; method?: string } = {}) {
+function req(
+  url: string,
+  opts: { token?: string; method?: string; body?: unknown } = {}
+) {
   const headers: Record<string, string> = {};
   if (opts.token) headers["cookie"] = `${auth.SESSION_COOKIE}=${opts.token}`;
-  return new NextRequest(new URL(url, "http://localhost"), { method: opts.method ?? "GET", headers });
+  if (opts.body !== undefined) headers["content-type"] = "application/json";
+  return new NextRequest(new URL(url, "http://localhost"), {
+    method: opts.method ?? "GET",
+    headers,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
 }
 
 let admin: ReturnType<typeof repo.createUser>;
@@ -152,6 +161,42 @@ describe("/api/users authorization (admin only)", () => {
   });
 });
 
+describe("PATCH /api/users/[id] authorization (admin only, v2.5)", () => {
+  it("403s a member", async () => {
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/${userB.id}`, { method: "PATCH", token: tokenA, body: { project: "Platform" } }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("401s with no session", async () => {
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/${userB.id}`, { method: "PATCH", body: { project: "Platform" } }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("200s for admin, updating the target user's project", async () => {
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/${userB.id}`, { method: "PATCH", token: adminToken, body: { project: "Platform" } }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.data.project).toBe("Platform");
+  });
+
+  it("404s for an unknown user id", async () => {
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/nope`, { method: "PATCH", token: adminToken, body: { project: "Platform" } }),
+      { params: Promise.resolve({ id: "nope" }) }
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("GET /api/reports groupBy=user authorization (admin only)", () => {
   it("403s a member", async () => {
     const res = await reportsRoute.GET(req("/api/reports?groupBy=user", { token: tokenA }));
@@ -237,9 +282,19 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.headers.get("content-type")).toContain("text/csv");
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[0]).toBe("member,task,duration_hours,date");
+    expect(lines[0]).toBe("member,project,task,duration_hours,date");
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Bob,AB1-bobs-task,1,2026-01-01");
+    expect(lines[1]).toBe("Bob,,AB1-bobs-task,1,2026-01-01");
+  });
+
+  it("includes the member's assigned project in its column", async () => {
+    await repo.updateUser(userB.id, { project: "Platform" });
+
+    const res = await reportsCsvRoute.GET(req(`/api/reports/csv`, { token: tokenB }));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    expect(lines[1]).toBe("Bob,Platform,AB1-bobs-task,1,2026-01-01");
   });
 
   it("200s for admin with userId=all, containing multiple members", async () => {
@@ -256,7 +311,7 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[0]).toBe("member,task,duration_hours,date");
+    expect(lines[0]).toBe("member,project,task,duration_hours,date");
     const members = lines.slice(1).map((line) => line.split(",")[0]);
     expect(new Set(members)).toEqual(new Set(["Alice", "Bob"]));
   });
@@ -273,7 +328,7 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[1]).toBe('Alice,"meeting, planning",1,2026-01-04');
+    expect(lines[1]).toBe('Alice,,"meeting, planning",1,2026-01-04');
   });
 
   it("orders rows by date ascending", async () => {

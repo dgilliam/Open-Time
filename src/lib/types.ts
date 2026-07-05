@@ -6,6 +6,9 @@ export interface User {
   email: string;
   role: Role;
   createdAt: string;
+  // Optional free-text label assigned by the admin (v2.5). Not a secret —
+  // present regardless of caller role, but no member-facing UI renders it.
+  project: string | null;
 }
 
 export interface Task {
@@ -25,6 +28,7 @@ export interface TimeEntry {
   // joined fields
   taskName: string;
   userName: string;
+  userProject: string | null;
 }
 
 export interface Contributor {
@@ -45,6 +49,8 @@ export interface ReportGroup {
   contributors?: Contributor[];
   // Only populated for groupBy=user: distinct tasks that user worked in range.
   taskCount?: number;
+  // Only populated for groupBy=user: the user's current project label (v2.5).
+  project?: string | null;
 }
 
 export interface ReportResult {

@@ -40,8 +40,16 @@ interface ContributorRow {
 // Column configs for the three dashboard tables' click-to-sort headers
 // (docs/PLAN.md v2.2 addendum, 2026-07-05): text columns default asc,
 // numeric/date columns default desc on first click.
+// Note (v2.5): the Project columns below use an empty-string accessor for
+// unassigned rows (per plan), which means unassigned actually sorts FIRST
+// on ascending (empty string < any character) rather than last — a plain
+// localeCompare has no notion of "last" for a blank value without special-
+// casing. Flagged as a known deviation from the plan's literal "unassigned
+// sorts last on asc" wording; the plan explicitly OK'd the empty-string
+// accessor approach.
 const TEAM_COLUMNS: Record<string, SortableColumn<ContributorRow>> = {
   name: { accessor: (r) => r.user.name, defaultDir: "asc" },
+  project: { accessor: (r) => r.user.project ?? "", defaultDir: "asc" },
   hours: { accessor: (r) => r.hours, defaultDir: "desc" },
   activeDays: { accessor: (r) => r.activeDays, defaultDir: "desc" },
   lastWorked: { accessor: (r) => r.lastWorked ?? "", defaultDir: "desc" },
@@ -62,6 +70,7 @@ function taskTiebreak(a: ReportGroup, b: ReportGroup) {
 
 const ENTRY_COLUMNS: Record<string, SortableColumn<TimeEntry>> = {
   member: { accessor: (e) => e.userName, defaultDir: "asc" },
+  project: { accessor: (e) => e.userProject ?? "", defaultDir: "asc" },
   task: { accessor: (e) => e.taskName, defaultDir: "asc" },
   date: { accessor: (e) => e.startedAt, defaultDir: "desc" },
   duration: { accessor: (e) => e.durationSecs ?? -1, defaultDir: "desc" },
@@ -131,6 +140,7 @@ export default function DashboardPage() {
   const [taskReport, setTaskReport] = useState<ReportResult | null>(null);
   const [allEntries, setAllEntries] = useState<TimeEntry[]>([]);
   const [entriesFilter, setEntriesFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
   const [editing, setEditing] = useState<TimeEntry | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -170,9 +180,24 @@ export default function DashboardPage() {
       .finally(() => setReady(true));
   }, [user, loadAll]);
 
+  // Distinct projects among the team, for the Entries "Project" filter — not
+  // just projects appearing in the current range's entries, so the option
+  // list doesn't shift as the date range changes.
+  const projectOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of users) if (u.project) set.add(u.project);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [users]);
+
   const displayedEntries = useMemo(
-    () => (entriesFilter === "all" ? allEntries : allEntries.filter((e) => e.userId === entriesFilter)),
-    [allEntries, entriesFilter]
+    () =>
+      allEntries.filter((e) => {
+        if (entriesFilter !== "all" && e.userId !== entriesFilter) return false;
+        if (projectFilter === "none") return !e.userProject;
+        if (projectFilter !== "all" && e.userProject !== projectFilter) return false;
+        return true;
+      }),
+    [allEntries, entriesFilter, projectFilter]
   );
 
   const contributorRows = useMemo(() => {
@@ -291,6 +316,7 @@ export default function DashboardPage() {
                 <thead>
                   <tr>
                     <SortTh label="Name" sortKey="name" controller={teamSort} />
+                    <SortTh label="Project" sortKey="project" controller={teamSort} />
                     <SortTh label="Hours" sortKey="hours" controller={teamSort} numeric />
                     <SortTh label="Active days" sortKey="activeDays" controller={teamSort} numeric />
                     <SortTh label="Last worked" sortKey="lastWorked" controller={teamSort} />
@@ -300,6 +326,7 @@ export default function DashboardPage() {
                   {teamSort.sorted.map((row) => (
                     <tr key={row.user.id}>
                       <td className="strong">{row.user.name}</td>
+                      <td className="muted">{row.user.project ?? "—"}</td>
                       <td className="num">{hoursLabel(row.hours * 3600)}</td>
                       <td className="num">{row.activeDays}</td>
                       <td className="muted">
@@ -311,6 +338,7 @@ export default function DashboardPage() {
                 <tfoot>
                   <tr>
                     <td>Total</td>
+                    <td></td>
                     <td className="num">{hoursLabel((userReport?.totalHours ?? 0) * 3600)}</td>
                     <td></td>
                     <td></td>
@@ -379,12 +407,25 @@ export default function DashboardPage() {
             </h2>
             <div className="toolbar">
               <UserSelect users={users} value={entriesFilter} onChange={setEntriesFilter} label="Member" includeAll />
+              <label className="inline-label">
+                Project
+                <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
+                  <option value="all">All projects</option>
+                  {projectOptions.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                  <option value="none">No project</option>
+                </select>
+              </label>
             </div>
             <div className="table-scroll">
               <table className="entry-table">
                 <thead>
                   <tr>
                     <SortTh label="Member" sortKey="member" controller={entrySort} />
+                    <SortTh label="Project" sortKey="project" controller={entrySort} />
                     <SortTh label="Task" sortKey="task" controller={entrySort} />
                     <SortTh label="Date" sortKey="date" controller={entrySort} />
                     <th>Start</th>
@@ -397,6 +438,7 @@ export default function DashboardPage() {
                   {cappedEntries.map((entry) => (
                     <tr key={entry.id}>
                       <td>{entry.userName}</td>
+                      <td className="muted">{entry.userProject ?? "—"}</td>
                       <td className="mono">{entry.taskName}</td>
                       <td className="muted">{formatShortDate(new Date(entry.startedAt))}</td>
                       <td>{formatTime(entry.startedAt)}</td>
@@ -422,7 +464,7 @@ export default function DashboardPage() {
                   ))}
                   {cappedEntries.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="muted">
+                      <td colSpan={8} className="muted">
                         No entries in this range.
                       </td>
                     </tr>
@@ -430,10 +472,11 @@ export default function DashboardPage() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    {/* Sums every entry matching the member + date filters,
-                        not just the 200 rendered rows — the count note above
-                        explains the difference when the cap is active. */}
-                    <td colSpan={5}>Total</td>
+                    {/* Sums every entry matching the member + project + date
+                        filters, not just the 200 rendered rows — the count
+                        note above explains the difference when the cap is
+                        active. */}
+                    <td colSpan={6}>Total</td>
                     <td className="num">{hoursLabel(displayedTotalSecs)}</td>
                     <td></td>
                   </tr>

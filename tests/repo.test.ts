@@ -85,6 +85,76 @@ describe("users", () => {
   it("countUsers reflects the current row count", () => {
     expect(repo.countUsers()).toBe(3);
   });
+
+  it("creates a user with an optional project", () => {
+    const withProject = repo.createUser({
+      name: "Charlie",
+      email: "charlie@example.com",
+      password: "password123",
+      role: "member",
+      project: "AI Assessor",
+    });
+    expect(withProject.project).toBe("AI Assessor");
+  });
+
+  it("defaults project to null when omitted", () => {
+    expect(userA.project).toBeNull();
+  });
+});
+
+describe("normalizeProject", () => {
+  it("returns null for undefined/null/empty/whitespace-only input", () => {
+    expect(repo.normalizeProject(undefined)).toBeNull();
+    expect(repo.normalizeProject(null)).toBeNull();
+    expect(repo.normalizeProject("")).toBeNull();
+    expect(repo.normalizeProject("   ")).toBeNull();
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(repo.normalizeProject("  Platform  ")).toBe("Platform");
+  });
+
+  it("accepts exactly 60 characters", () => {
+    const raw = "x".repeat(60);
+    expect(repo.normalizeProject(raw)).toBe(raw);
+  });
+
+  it("rejects a project over 60 characters", () => {
+    expectApiError(() => repo.normalizeProject("x".repeat(61)), 400);
+  });
+});
+
+describe("updateUser", () => {
+  it("sets a project on a user", () => {
+    const updated = repo.updateUser(userA.id, { project: "Platform" });
+    expect(updated.project).toBe("Platform");
+  });
+
+  it("clears a project by setting an empty string", () => {
+    repo.updateUser(userA.id, { project: "Platform" });
+    const cleared = repo.updateUser(userA.id, { project: "" });
+    expect(cleared.project).toBeNull();
+  });
+
+  it("updates the name when provided", () => {
+    const updated = repo.updateUser(userA.id, { name: "Alicia" });
+    expect(updated.name).toBe("Alicia");
+  });
+
+  it("rejects an empty name", () => {
+    expectApiError(() => repo.updateUser(userA.id, { name: "  " }), 400);
+  });
+
+  it("leaves name/project untouched when omitted from the patch", () => {
+    repo.updateUser(userA.id, { project: "Platform" });
+    const updated = repo.updateUser(userA.id, {});
+    expect(updated.name).toBe("Alice");
+    expect(updated.project).toBe("Platform");
+  });
+
+  it("404s for an unknown user", () => {
+    expectApiError(() => repo.updateUser("nope", { project: "Platform" }), 404);
+  });
 });
 
 describe("task name validation and normalization", () => {
@@ -438,6 +508,15 @@ describe("entries listing with date filters", () => {
     const entries = repo.listEntries({});
     expect(entries[0].startedAt >= entries[entries.length - 1].startedAt).toBe(true);
   });
+
+  it("joins the owning user's current project as userProject (v2.5)", () => {
+    repo.updateUser(userA.id, { project: "AI Assessor" });
+    const entries = repo.listEntries({ userId: userA.id });
+    expect(entries.every((e) => e.userProject === "AI Assessor")).toBe(true);
+
+    const bobEntries = repo.listEntries({ userId: userB.id });
+    expect(bobEntries.every((e) => e.userProject === null)).toBe(true);
+  });
 });
 
 describe("calendar bucketing", () => {
@@ -556,6 +635,15 @@ describe("report", () => {
     const result = repo.report({ userId: userA.id, groupBy: "task" });
     expect(result.distinctTaskCount).toBe(result.groups.length);
     expect(result.groups[0].taskCount).toBeUndefined();
+  });
+
+  it("attaches the user's current project to groupBy=user groups (v2.5)", () => {
+    repo.updateUser(userA.id, { project: "AI Assessor" });
+    const result = repo.report({ groupBy: "user" });
+    const a = result.groups.find((g) => g.id === userA.id)!;
+    const b = result.groups.find((g) => g.id === userB.id)!;
+    expect(a.project).toBe("AI Assessor");
+    expect(b.project).toBeNull();
   });
 });
 

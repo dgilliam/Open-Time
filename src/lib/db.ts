@@ -75,4 +75,15 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_started_at ON time_entries(started_at);
 `);
 
+// ---------- v2.5 additive dev migration: users.project ----------
+// Minimal member-level project label (docs/PLAN.md v2.5). Dev-grade
+// idempotent migration: CREATE TABLE IF NOT EXISTS above won't add a column
+// to an existing table, so we check PRAGMA table_info(users) for a `project`
+// column and ALTER TABLE to add it if missing. No production data to
+// preserve yet; revisit with a real migration tool before that changes.
+const userColumns = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+if (!userColumns.some((c) => c.name === "project")) {
+  db.exec("ALTER TABLE users ADD COLUMN project TEXT");
+}
+
 export default db;

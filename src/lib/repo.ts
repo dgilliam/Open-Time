@@ -13,10 +13,18 @@ interface UserRow {
   password_hash: string;
   role: Role;
   created_at: string;
+  project: string | null;
 }
 
 function rowToUser(row: UserRow): User {
-  return { id: row.id, name: row.name, email: row.email, role: row.role, createdAt: row.created_at };
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    createdAt: row.created_at,
+    project: row.project ?? null,
+  };
 }
 
 interface TaskRow {
@@ -39,6 +47,7 @@ interface EntryRow {
   created_at: string;
   task_name: string;
   user_name: string;
+  user_project: string | null;
 }
 
 function rowToEntry(row: EntryRow): TimeEntry {
@@ -52,6 +61,7 @@ function rowToEntry(row: EntryRow): TimeEntry {
     createdAt: row.created_at,
     taskName: row.task_name,
     userName: row.user_name,
+    userProject: row.user_project ?? null,
   };
 }
 
@@ -68,7 +78,8 @@ const ENTRY_SELECT = `
     e.duration_secs as duration_secs,
     e.created_at as created_at,
     t.name as task_name,
-    u.name as user_name
+    u.name as user_name,
+    u.project as user_project
   FROM time_entries e
   JOIN tasks t ON t.id = e.task_id
   JOIN users u ON u.id = e.user_id
@@ -106,11 +117,24 @@ export function getUserAuthByEmail(email: string): (User & { passwordHash: strin
   return { ...rowToUser(row), passwordHash: row.password_hash };
 }
 
+/**
+ * Trims a raw project label; "" (or whitespace-only) normalizes to NULL
+ * (unassigned); over 60 chars is a 400. See docs/PLAN.md v2.5.
+ */
+export function normalizeProject(raw: string | null | undefined): string | null {
+  if (raw === undefined || raw === null) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 60) throw new ApiError(400, "project must be at most 60 characters");
+  return trimmed;
+}
+
 export function createUser(input: {
   name: string;
   email: string;
   password: string;
   role: Role;
+  project?: string | null;
 }): User {
   const name = (input.name || "").trim();
   const email = (input.email || "").trim().toLowerCase();
@@ -118,6 +142,7 @@ export function createUser(input: {
   if (!name) throw new ApiError(400, "name is required");
   if (!email) throw new ApiError(400, "email is required");
   if (password.length < 8) throw new ApiError(400, "password must be at least 8 characters");
+  const project = normalizeProject(input.project);
 
   const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
   if (existing) throw new ApiError(400, "email already in use");
@@ -126,10 +151,26 @@ export function createUser(input: {
   const createdAt = new Date().toISOString();
   const passwordHash = hashPassword(password);
   db.prepare(
-    "INSERT INTO users (id, name, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(id, name, email, passwordHash, input.role, createdAt);
+    "INSERT INTO users (id, name, email, password_hash, role, created_at, project) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, name, email, passwordHash, input.role, createdAt, project);
 
-  return { id, name, email, role: input.role, createdAt };
+  return { id, name, email, role: input.role, createdAt, project };
+}
+
+/** Admin-only patch of a member's name and/or project. 404 if the user doesn't exist. */
+export function updateUser(id: string, patch: { name?: string; project?: string | null }): User {
+  const existing = getUserById(id);
+  if (!existing) throw new ApiError(404, "user not found");
+
+  let name = existing.name;
+  if (patch.name !== undefined) {
+    name = patch.name.trim();
+    if (!name) throw new ApiError(400, "name is required");
+  }
+  const project = patch.project !== undefined ? normalizeProject(patch.project) : existing.project;
+
+  db.prepare("UPDATE users SET name = ?, project = ? WHERE id = ?").run(name, project, id);
+  return getUserById(id)!;
 }
 
 // ---------- tasks ----------
@@ -397,6 +438,7 @@ export function report(opts: {
     dates: Set<string>;
     contributors?: Map<string, { name: string; secs: number }>;
     taskIds?: Set<string>;
+    project?: string | null;
   }
   const groups = new Map<string, Acc>();
   let totalSecs = 0;
@@ -413,12 +455,20 @@ export function report(opts: {
     secs: number,
     dateKey: string,
     contributor?: { id: string; name: string },
-    taskId?: string
+    taskId?: string,
+    project?: string | null
   ): void {
     totalSecs += secs;
     let acc = groups.get(key);
     if (!acc) {
-      acc = { id: key, name, secs: 0, dates: new Set(), contributors: withContributors ? new Map() : undefined };
+      acc = {
+        id: key,
+        name,
+        secs: 0,
+        dates: new Set(),
+        contributors: withContributors ? new Map() : undefined,
+        project,
+      };
       groups.set(key, acc);
     }
     acc.secs += secs;
@@ -455,7 +505,15 @@ export function report(opts: {
     // groupBy === "user": admin overview across everyone in range (userId filter ignored).
     const entries = listEntries({ from: opts.from, to: opts.to }).filter((e) => e.durationSecs !== null);
     for (const e of entries) {
-      addToGroup(e.userId, e.userName, e.durationSecs as number, localDateKey(e.startedAt), undefined, e.taskId);
+      addToGroup(
+        e.userId,
+        e.userName,
+        e.durationSecs as number,
+        localDateKey(e.startedAt),
+        undefined,
+        e.taskId,
+        e.userProject
+      );
     }
   }
 
@@ -477,6 +535,7 @@ export function report(opts: {
       }
       if (opts.groupBy === "user") {
         group.taskCount = acc.taskIds?.size ?? 0;
+        group.project = acc.project ?? null;
       }
       return group;
     })

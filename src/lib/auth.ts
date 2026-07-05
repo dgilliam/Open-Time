@@ -42,10 +42,18 @@ interface SessionUserRow {
   email: string;
   role: "admin" | "member";
   created_at: string;
+  project: string | null;
 }
 
 function rowToUser(row: SessionUserRow): User {
-  return { id: row.id, name: row.name, email: row.email, role: row.role, createdAt: row.created_at };
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    createdAt: row.created_at,
+    project: row.project ?? null,
+  };
 }
 
 export function createSession(userId: string): { token: string; expiresAt: string } {
@@ -65,7 +73,8 @@ export function getSessionUser(token: string | undefined | null): User | null {
   const tokenHash = hashToken(token);
   const row = db
     .prepare(
-      `SELECT u.id as id, u.name as name, u.email as email, u.role as role, u.created_at as created_at
+      `SELECT u.id as id, u.name as name, u.email as email, u.role as role, u.created_at as created_at,
+              u.project as project
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ? AND s.expires_at > ?`

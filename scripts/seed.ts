@@ -54,15 +54,23 @@ function main() {
     role: "admin",
   });
 
+  // Projects assigned to demonstrate the v2.5 project filters/exports;
+  // Katherine is left unassigned on purpose (the "no project" case).
   const memberDefs = [
-    { name: "Ada Lovelace", email: "ada@reposcout.dev" },
-    { name: "Grace Hopper", email: "grace@reposcout.dev" },
-    { name: "Alan Turing", email: "alan@reposcout.dev" },
-    { name: "Margaret Hamilton", email: "margaret@reposcout.dev" },
-    { name: "Katherine Johnson", email: "katherine@reposcout.dev" },
+    { name: "Ada Lovelace", email: "ada@reposcout.dev", project: "AI Assessor" },
+    { name: "Grace Hopper", email: "grace@reposcout.dev", project: "AI Assessor" },
+    { name: "Alan Turing", email: "alan@reposcout.dev", project: "Platform" },
+    { name: "Margaret Hamilton", email: "margaret@reposcout.dev", project: "Platform" },
+    { name: "Katherine Johnson", email: "katherine@reposcout.dev", project: null },
   ];
   const members = memberDefs.map((m) =>
-    repo.createUser({ name: m.name, email: m.email, password: "password123", role: "member" })
+    repo.createUser({
+      name: m.name,
+      email: m.email,
+      password: "password123",
+      role: "member",
+      project: m.project,
+    })
   );
   const allUsers = [admin, ...members];
 
@@ -103,6 +111,9 @@ function main() {
 
   console.log(
     `Seeded ${allUsers.length} users (1 admin, ${members.length} members), ${tasks.length} tasks, ${entryCount} time entries.`
+  );
+  console.log(
+    `Projects: ${memberDefs.map((m) => `${m.name} (${m.project ?? "unassigned"})`).join(", ")}.`
   );
   console.log("Admin login: drew@gilli.am / opentime-dev");
   console.log(`Member logins: ${members.map((m) => m.email).join(", ")} / password123`);
