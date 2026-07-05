@@ -384,6 +384,14 @@ revisit only when invoicing becomes a real feature.
 Execution: T18 = schema + repo + API + CSV + tests. T19 = UI (day
 navigator, add-time dialog, wrap-up dialog, badges).
 
+Addendum (2026-07-05, T22): /reports tables get the dashboard's
+click-to-sort headers (shared SortTh extracted to a component). Task
+grouping column order: Task | Status | Dates | Hours — Status is its own
+sortable column (badge, still click-to-cycle). User grouping columns all
+sortable too. Default order (API recency) preserved until a header is
+clicked, same rules as the dashboard (text asc-first, numeric/date
+desc-first).
+
 Addendum (2026-07-05, T21): clicking a STATUS BADGE cycles the status in
 place (open → submitted → accepted → dead_end → open), saving
 immediately via the same PATCH; title tooltip "Click to change status";
