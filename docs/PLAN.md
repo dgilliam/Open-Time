@@ -279,6 +279,42 @@ colors can be swapped in one place later.
   muted headers, 1px separators, right-aligned tabular-nums numerics.
 - Nav: subtle-surface sidebar, 1px right border, soft-pill links.
 
+## v2.5 — Member project assignment (2026-07-05)
+
+Projects return in deliberately minimal form: a project is a text label
+on the MEMBER (1 member → 1 project), assigned by the admin in /team,
+completely invisible to ICs. Not an entity, no CRUD, no rates, no
+per-entry assignment.
+
+Known semantic (founder-approved trade): the label is the member's
+CURRENT project — reassigning re-labels all their historical entries in
+admin tables and exports. Per-entry snapshots are the future upgrade if
+history must survive reassignment.
+
+- Schema: `users.project TEXT` (nullable). Idempotent dev migration in
+  db.ts: `ALTER TABLE users ADD COLUMN project TEXT` guarded by a
+  pragma table_info check.
+- Validation: trimmed, empty → NULL, max 60 chars.
+- API: PATCH `/api/users/[id]` (admin only) accepting `{name?, project?}`;
+  POST `/api/users` gains optional `project`. `listUsers` includes it;
+  `listEntries` rows gain joined `userProject`; report `groupBy=user`
+  groups gain `project`. Payload fields exist regardless of caller role
+  (it is a work label, not a secret) but NO member-facing UI renders it.
+- CSV export columns become: `member,project,task,duration_hours,date`
+  (empty string when unassigned).
+- Admin UI:
+  - /team: Project column; Add-member dialog gains optional Project
+    field; new Edit action per member (dialog: name + project — email
+    and role stay immutable for now).
+  - /dashboard Team table: sortable Project column.
+  - /dashboard Entries: sortable Project column + a Project filter
+    select (All projects / each distinct project / No project) that
+    composes with the member filter; totals keep matching filters.
+  - /reports user grouping: Project column.
+- IC UI: zero changes. Seed: assign projects to the five members (e.g.
+  "AI Assessor", "Platform", one member unassigned) so filters are
+  demonstrable.
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old
