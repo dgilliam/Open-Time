@@ -155,14 +155,16 @@ export default function ReportsPage() {
       {result && (
         <>
           <div className="table-count">
-            {pluralCount(result.groups.length, groupBy === "task" ? "task" : "user")}
+            {groupBy === "task"
+              ? pluralCount(result.groups.length, "task")
+              : `${pluralCount(result.groups.length, "user")} · ${pluralCount(result.distinctTaskCount, "task")}`}
           </div>
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>{groupBy === "task" ? "Task" : "User"}</th>
-                  {groupBy === "task" && <th>Dates</th>}
+                  {groupBy === "task" ? <th>Dates</th> : <th className="num">Tasks</th>}
                   <th className="num">Hours</th>
                 </tr>
               </thead>
@@ -170,13 +172,17 @@ export default function ReportsPage() {
                 {result.groups.map((g) => (
                   <tr key={g.id}>
                     <td className={groupBy === "task" ? "mono" : undefined}>{g.name}</td>
-                    {groupBy === "task" && <td className="muted">{formatReportDates(g.dates)}</td>}
+                    {groupBy === "task" ? (
+                      <td className="muted">{formatReportDates(g.dates)}</td>
+                    ) : (
+                      <td className="num">{g.taskCount ?? 0}</td>
+                    )}
                     <td className="num">{hoursLabel(g.hours * 3600)}</td>
                   </tr>
                 ))}
                 {result.groups.length === 0 && (
                   <tr>
-                    <td colSpan={groupBy === "task" ? 3 : 2} className="muted">
+                    <td colSpan={3} className="muted">
                       No entries in this range.
                     </td>
                   </tr>
@@ -185,7 +191,12 @@ export default function ReportsPage() {
               <tfoot>
                 <tr>
                   <td>Total</td>
-                  {groupBy === "task" && <td></td>}
+                  {groupBy === "task" ? (
+                    <td></td>
+                  ) : (
+                    // Distinct across the team, not the per-user sum (people share tasks).
+                    <td className="num">{result.distinctTaskCount}</td>
+                  )}
                   <td className="num">{hoursLabel(result.totalHours * 3600)}</td>
                 </tr>
               </tfoot>

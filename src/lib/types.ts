@@ -43,11 +43,14 @@ export interface ReportGroup {
   // task view); desc by hours. Single-user/self task groups and groupBy=user
   // groups never set this.
   contributors?: Contributor[];
+  // Only populated for groupBy=user: distinct tasks that user worked in range.
+  taskCount?: number;
 }
 
 export interface ReportResult {
   groups: ReportGroup[];
   totalHours: number;
+  distinctTaskCount: number; // distinct tasks across the whole result set
 }
 
 export interface CalendarDay {

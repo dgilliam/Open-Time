@@ -486,6 +486,29 @@ describe("report", () => {
     expect(result.totalHours).toBe(0);
     expect(result.groups.length).toBe(0);
   });
+
+  it("counts distinct tasks per user and overall in user grouping", () => {
+    // userA works a second, shared task so per-user counts and the distinct
+    // overall count diverge from a naive sum.
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab26-beta",
+      startedAt: "2026-01-02T09:00:00.000Z",
+      stoppedAt: "2026-01-02T10:00:00.000Z",
+    });
+    const result = repo.report({ groupBy: "user" });
+    const a = result.groups.find((g) => g.id === userA.id)!;
+    const b = result.groups.find((g) => g.id === userB.id)!;
+    expect(a.taskCount).toBe(2); // alpha + beta (running alpha entry excluded, but completed alpha counts)
+    expect(b.taskCount).toBe(1); // beta only
+    expect(result.distinctTaskCount).toBe(2); // alpha, beta — not 3
+  });
+
+  it("sets distinctTaskCount to the group count in task grouping and leaves taskCount unset", () => {
+    const result = repo.report({ userId: userA.id, groupBy: "task" });
+    expect(result.distinctTaskCount).toBe(result.groups.length);
+    expect(result.groups[0].taskCount).toBeUndefined();
+  });
 });
 
 describe("report — dates + recency sort (v2.1)", () => {

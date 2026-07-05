@@ -386,9 +386,11 @@ export function report(opts: {
     secs: number;
     dates: Set<string>;
     contributors?: Map<string, { name: string; secs: number }>;
+    taskIds?: Set<string>;
   }
   const groups = new Map<string, Acc>();
   let totalSecs = 0;
+  const allTaskIds = new Set<string>();
 
   // Only the admin dashboard's cross-team task grouping (groupBy=task,
   // userId=all) tracks per-contributor breakdowns; single-user/self task
@@ -400,7 +402,8 @@ export function report(opts: {
     name: string,
     secs: number,
     dateKey: string,
-    contributor?: { id: string; name: string }
+    contributor?: { id: string; name: string },
+    taskId?: string
   ): void {
     totalSecs += secs;
     let acc = groups.get(key);
@@ -410,6 +413,10 @@ export function report(opts: {
     }
     acc.secs += secs;
     acc.dates.add(dateKey);
+    if (taskId) {
+      allTaskIds.add(taskId);
+      (acc.taskIds ??= new Set()).add(taskId);
+    }
     if (withContributors && contributor) {
       const existing = acc.contributors!.get(contributor.id);
       if (existing) {
@@ -425,16 +432,20 @@ export function report(opts: {
       (e) => e.durationSecs !== null
     );
     for (const e of entries) {
-      addToGroup(e.taskId, e.taskName, e.durationSecs as number, localDateKey(e.startedAt), {
-        id: e.userId,
-        name: e.userName,
-      });
+      addToGroup(
+        e.taskId,
+        e.taskName,
+        e.durationSecs as number,
+        localDateKey(e.startedAt),
+        { id: e.userId, name: e.userName },
+        e.taskId
+      );
     }
   } else {
     // groupBy === "user": admin overview across everyone in range (userId filter ignored).
     const entries = listEntries({ from: opts.from, to: opts.to }).filter((e) => e.durationSecs !== null);
     for (const e of entries) {
-      addToGroup(e.userId, e.userName, e.durationSecs as number, localDateKey(e.startedAt));
+      addToGroup(e.userId, e.userName, e.durationSecs as number, localDateKey(e.startedAt), undefined, e.taskId);
     }
   }
 
@@ -454,6 +465,9 @@ export function report(opts: {
           .map(([id, c]) => ({ id, name: c.name, hours: c.secs / 3600 }))
           .sort((a, b) => b.hours - a.hours);
       }
+      if (opts.groupBy === "user") {
+        group.taskCount = acc.taskIds?.size ?? 0;
+      }
       return group;
     })
     .sort((a, b) => {
@@ -461,7 +475,7 @@ export function report(opts: {
       return b.hours - a.hours;
     });
 
-  return { groups: result, totalHours: totalSecs / 3600 };
+  return { groups: result, totalHours: totalSecs / 3600, distinctTaskCount: allTaskIds.size };
 }
 
 // ---------- timesheet ----------
