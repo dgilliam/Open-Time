@@ -67,6 +67,9 @@ export interface ReportGroup {
   // been patched. Backward compatible — absent for groupBy=user groups.
   status?: TaskStatus;
   link?: string | null;
+  // Only populated for groupBy=task groups (v2.6/T20): the task's current
+  // wrap-up details, so any surface can prefill the wrap-up dialog.
+  details?: string | null;
 }
 
 export interface ReportResult {

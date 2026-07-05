@@ -866,9 +866,10 @@ describe("report — task groups carry status/link (v2.6)", () => {
     const group = result.groups.find((g) => g.name === "AB64-default-status")!;
     expect(group.status).toBe("open");
     expect(group.link).toBeNull();
+    expect(group.details).toBeNull();
   });
 
-  it("carries the task's current status/link onto its report group", () => {
+  it("carries the task's current status/link/details onto its report group", () => {
     const entry = repo.createEntry({
       userId: userA.id,
       task: "ab65-wrapped-up",
@@ -878,16 +879,21 @@ describe("report — task groups carry status/link (v2.6)", () => {
     repo.updateTask(
       entry.taskId,
       { id: admin.id, role: "admin" },
-      { status: "accepted", link: "https://reposcout.slack.com/archives/C1/p1" }
+      {
+        status: "accepted",
+        link: "https://reposcout.slack.com/archives/C1/p1",
+        details: "wrapped up notes",
+      }
     );
 
     const result = repo.report({ userId: userA.id, groupBy: "task" });
     const group = result.groups.find((g) => g.name === "AB65-wrapped-up")!;
     expect(group.status).toBe("accepted");
     expect(group.link).toBe("https://reposcout.slack.com/archives/C1/p1");
+    expect(group.details).toBe("wrapped up notes");
   });
 
-  it("leaves status/link unset on groupBy=user groups", () => {
+  it("leaves status/link/details unset on groupBy=user groups", () => {
     repo.createEntry({
       userId: userA.id,
       task: "ab66-user-group",
@@ -898,6 +904,7 @@ describe("report — task groups carry status/link (v2.6)", () => {
     const group = result.groups.find((g) => g.id === userA.id)!;
     expect(group.status).toBeUndefined();
     expect(group.link).toBeUndefined();
+    expect(group.details).toBeUndefined();
   });
 });
 

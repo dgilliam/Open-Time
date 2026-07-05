@@ -18,8 +18,9 @@ import {
   startOfWeekSun,
   toIso,
 } from "@/lib/format";
-import type { TimeEntry } from "@/lib/types";
+import type { TaskStatus, TimeEntry } from "@/lib/types";
 import { TaskCombobox } from "@/components/TaskCombobox";
+import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { useSession } from "@/components/SessionContext";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -28,6 +29,23 @@ interface Row {
   key: string;
   displayName: string;
   secsByDate: Map<string, number>;
+  // Present only for rows backed by at least one real entry (v2.6/T20) — the
+  // first matching entry's task identity/wrap-up metadata, since every entry
+  // in a row shares the same task. Manually-added rows with no entries yet
+  // have none of these and render as plain (non-clickable) text.
+  taskId?: string;
+  taskStatus?: TaskStatus;
+  taskLink?: string | null;
+  taskDetails?: string | null;
+}
+
+/** Shared shape for opening TaskWrapUpDialog from a timesheet row (v2.6/T20). */
+interface WrapUpTarget {
+  taskId: string;
+  taskName: string;
+  status: TaskStatus;
+  link: string | null;
+  details: string | null;
 }
 
 /**
@@ -76,6 +94,7 @@ export default function TimesheetPage() {
   );
   const [addingRow, setAddingRow] = useState(false);
   const [newRowTask, setNewRowTask] = useState("");
+  const [wrapUp, setWrapUp] = useState<WrapUpTarget | null>(null);
   const cancelRef = useRef(false);
 
   const days = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekStart, i)), [weekStart]);
@@ -110,7 +129,15 @@ export default function TimesheetPage() {
       const key = normalizeKey(e.taskName);
       let row = grouped.get(key);
       if (!row) {
-        row = { key, displayName: e.taskName, secsByDate: new Map() };
+        row = {
+          key,
+          displayName: e.taskName,
+          secsByDate: new Map(),
+          taskId: e.taskId,
+          taskStatus: e.taskStatus,
+          taskLink: e.taskLink,
+          taskDetails: e.taskDetails,
+        };
         grouped.set(key, row);
       }
       const dateKey = dateInputValue(new Date(e.startedAt));
@@ -215,7 +242,27 @@ export default function TimesheetPage() {
             )}
             {rows.map((row) => (
               <tr key={row.key}>
-                <td className="mono">{row.displayName}</td>
+                <td className="mono">
+                  {row.taskId ? (
+                    <button
+                      type="button"
+                      className="task-name-link"
+                      onClick={() =>
+                        setWrapUp({
+                          taskId: row.taskId!,
+                          taskName: row.displayName,
+                          status: row.taskStatus ?? "open",
+                          link: row.taskLink ?? null,
+                          details: row.taskDetails ?? null,
+                        })
+                      }
+                    >
+                      {row.displayName}
+                    </button>
+                  ) : (
+                    row.displayName
+                  )}
+                </td>
                 {dateKeys.map((dateKey) => {
                   const secs = row.secsByDate.get(dateKey) ?? 0;
                   const isEditing = editing?.rowKey === row.key && editing.dateKey === dateKey;
@@ -307,6 +354,20 @@ export default function TimesheetPage() {
           </button>
         )}
       </div>
+      {wrapUp && (
+        <TaskWrapUpDialog
+          taskId={wrapUp.taskId}
+          taskName={wrapUp.taskName}
+          status={wrapUp.status}
+          link={wrapUp.link}
+          details={wrapUp.details}
+          onClose={() => setWrapUp(null)}
+          onSaved={() => {
+            setWrapUp(null);
+            loadWeek();
+          }}
+        />
+      )}
     </div>
   );
 }

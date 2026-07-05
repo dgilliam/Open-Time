@@ -22,12 +22,22 @@ import {
   startOfWeek,
   toIso,
 } from "@/lib/format";
-import type { ReportGroup, ReportResult, TimeEntry, User } from "@/lib/types";
+import type { ReportGroup, ReportResult, TaskStatus, TimeEntry, User } from "@/lib/types";
 import { EntryDialog } from "@/components/EntryDialog";
 import { StatusBadge } from "@/components/StatusBadge";
+import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { useSession } from "@/components/SessionContext";
 import { UserSelect } from "@/components/UserSelect";
 import { useSortable, type SortableColumn, type SortController } from "@/components/useSortable";
+
+/** Shared shape for opening TaskWrapUpDialog from any table row (v2.6/T20). */
+interface WrapUpTarget {
+  taskId: string;
+  taskName: string;
+  status: TaskStatus;
+  link: string | null;
+  details: string | null;
+}
 
 const ENTRIES_CAP = 200;
 
@@ -158,6 +168,7 @@ export default function DashboardPage() {
   const [entriesFilter, setEntriesFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [editing, setEditing] = useState<TimeEntry | null>(null);
+  const [wrapUp, setWrapUp] = useState<WrapUpTarget | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -392,7 +403,21 @@ export default function DashboardPage() {
                   {taskSort.sorted.map((g) => (
                     <tr key={g.id}>
                       <td className="mono">
-                        {g.name}
+                        <button
+                          type="button"
+                          className="task-name-link"
+                          onClick={() =>
+                            setWrapUp({
+                              taskId: g.id,
+                              taskName: g.name,
+                              status: g.status ?? "open",
+                              link: g.link ?? null,
+                              details: g.details ?? null,
+                            })
+                          }
+                        >
+                          {g.name}
+                        </button>
                         {g.link && (
                           <a
                             className="task-link-icon"
@@ -484,7 +509,23 @@ export default function DashboardPage() {
                     <tr key={entry.id}>
                       <td>{entry.userName}</td>
                       <td className="muted">{entry.userProject ?? "—"}</td>
-                      <td className="mono">{entry.taskName}</td>
+                      <td className="mono">
+                        <button
+                          type="button"
+                          className="task-name-link"
+                          onClick={() =>
+                            setWrapUp({
+                              taskId: entry.taskId,
+                              taskName: entry.taskName,
+                              status: entry.taskStatus,
+                              link: entry.taskLink,
+                              details: entry.taskDetails,
+                            })
+                          }
+                        >
+                          {entry.taskName}
+                        </button>
+                      </td>
                       <td className="muted">{formatShortDate(new Date(entry.startedAt))}</td>
                       <td>{formatTime(entry.startedAt)}</td>
                       <td>{entry.stoppedAt ? formatTime(entry.stoppedAt) : "—"}</td>
@@ -538,6 +579,20 @@ export default function DashboardPage() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
+            loadAll();
+          }}
+        />
+      )}
+      {wrapUp && (
+        <TaskWrapUpDialog
+          taskId={wrapUp.taskId}
+          taskName={wrapUp.taskName}
+          status={wrapUp.status}
+          link={wrapUp.link}
+          details={wrapUp.details}
+          onClose={() => setWrapUp(null)}
+          onSaved={() => {
+            setWrapUp(null);
             loadAll();
           }}
         />

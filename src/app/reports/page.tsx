@@ -3,7 +3,7 @@
 // Presets (This week / Last week / This month) + custom range, hours-by-task
 // table. Admins can switch person or group by user instead of task.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getReport, listUsers, reportsCsvUrl } from "@/lib/api";
 import {
   addDays,
@@ -16,10 +16,20 @@ import {
   startOfWeek,
   toIso,
 } from "@/lib/format";
-import type { ReportResult, User } from "@/lib/types";
+import type { ReportResult, TaskStatus, User } from "@/lib/types";
 import { StatusBadge } from "@/components/StatusBadge";
+import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { useSession } from "@/components/SessionContext";
 import { UserSelect } from "@/components/UserSelect";
+
+/** Shared shape for opening TaskWrapUpDialog from the task-grouping table (v2.6/T20). */
+interface WrapUpTarget {
+  taskId: string;
+  taskName: string;
+  status: TaskStatus;
+  link: string | null;
+  details: string | null;
+}
 
 type Preset = "this-week" | "last-week" | "this-month" | "last-30" | "custom";
 type GroupBy = "task" | "user";
@@ -69,6 +79,7 @@ export default function ReportsPage() {
   const [customTo, setCustomTo] = useState(dateInputValue(addDays(startOfWeek(new Date()), 6)));
   const [result, setResult] = useState<ReportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wrapUp, setWrapUp] = useState<WrapUpTarget | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -80,19 +91,26 @@ export default function ReportsPage() {
     }
   }, [user]);
 
-  useEffect(() => {
+  const loadReport = useCallback(async () => {
     if (!selectedUserId) return;
     const { from, to } = activeIsoRange(preset, customFrom, customTo);
     setError(null);
-    getReport({
-      userId: groupBy === "task" ? selectedUserId : undefined,
-      from,
-      to,
-      groupBy,
-    })
-      .then(setResult)
-      .catch((err) => setError(err instanceof Error ? err.message : "failed to load report"));
+    try {
+      const rep = await getReport({
+        userId: groupBy === "task" ? selectedUserId : undefined,
+        from,
+        to,
+        groupBy,
+      });
+      setResult(rep);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to load report");
+    }
   }, [selectedUserId, groupBy, preset, customFrom, customTo]);
+
+  useEffect(() => {
+    loadReport();
+  }, [loadReport]);
 
   if (!user) return null;
 
@@ -198,7 +216,25 @@ export default function ReportsPage() {
                 {result.groups.map((g) => (
                   <tr key={g.id}>
                     <td className={groupBy === "task" ? "mono" : undefined}>
-                      {g.name}
+                      {groupBy === "task" ? (
+                        <button
+                          type="button"
+                          className="task-name-link"
+                          onClick={() =>
+                            setWrapUp({
+                              taskId: g.id,
+                              taskName: g.name,
+                              status: g.status ?? "open",
+                              link: g.link ?? null,
+                              details: g.details ?? null,
+                            })
+                          }
+                        >
+                          {g.name}
+                        </button>
+                      ) : (
+                        g.name
+                      )}
                       {groupBy === "task" && (
                         <>
                           {" "}
@@ -250,6 +286,20 @@ export default function ReportsPage() {
             </table>
           </div>
         </>
+      )}
+      {wrapUp && (
+        <TaskWrapUpDialog
+          taskId={wrapUp.taskId}
+          taskName={wrapUp.taskName}
+          status={wrapUp.status}
+          link={wrapUp.link}
+          details={wrapUp.details}
+          onClose={() => setWrapUp(null)}
+          onSaved={() => {
+            setWrapUp(null);
+            loadReport();
+          }}
+        />
       )}
     </div>
   );

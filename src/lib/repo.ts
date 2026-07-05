@@ -559,6 +559,7 @@ export function report(opts: {
     project?: string | null;
     status?: TaskStatus;
     link?: string | null;
+    details?: string | null;
   }
   const groups = new Map<string, Acc>();
   let totalSecs = 0;
@@ -578,7 +579,8 @@ export function report(opts: {
     taskId?: string,
     project?: string | null,
     taskStatus?: TaskStatus,
-    taskLink?: string | null
+    taskLink?: string | null,
+    taskDetails?: string | null
   ): void {
     totalSecs += secs;
     let acc = groups.get(key);
@@ -592,6 +594,7 @@ export function report(opts: {
         project,
         status: taskStatus,
         link: taskLink,
+        details: taskDetails,
       };
       groups.set(key, acc);
     }
@@ -625,7 +628,8 @@ export function report(opts: {
         e.taskId,
         undefined,
         e.taskStatus,
-        e.taskLink
+        e.taskLink,
+        e.taskDetails
       );
     }
   } else {
@@ -667,6 +671,7 @@ export function report(opts: {
       if (opts.groupBy === "task") {
         group.status = acc.status ?? "open";
         group.link = acc.link ?? null;
+        group.details = acc.details ?? null;
       }
       return group;
     })
