@@ -5,11 +5,18 @@
 // once AppShell has confirmed a user is signed in, so `user` here is never
 // null in practice — the fallback guards keep this component safe to reuse
 // anywhere.
+//
+// v2.3: this is now reused as both the desktop sidebar and the mobile
+// off-canvas drawer's contents (AppShell decides which via CSS classes on
+// the same <nav>). `collapsed`/`onToggleCollapse` drive the desktop-only
+// collapse chevron at the top; `open` just adds the class the drawer's CSS
+// transform keys off of.
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
 import { useSession } from "./SessionContext";
+import { NavToggle } from "./NavToggle";
 
 const BASE_LINKS = [
   { href: "/", label: "Timer" },
@@ -18,7 +25,15 @@ const BASE_LINKS = [
   { href: "/reports", label: "Reports" },
 ];
 
-export function NavBar() {
+export function NavBar({
+  open,
+  onToggleCollapse,
+}: {
+  /** Mobile drawer open state — adds the class the CSS transform keys off of. */
+  open?: boolean;
+  /** Desktop-only collapse chevron handler; omitted, the chevron isn't shown. */
+  onToggleCollapse?: () => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, setUser } = useSession();
@@ -38,8 +53,20 @@ export function NavBar() {
   }
 
   return (
-    <nav className="nav">
-      <div className="nav-brand">Open-Time</div>
+    <nav className={open ? "nav nav-open" : "nav"}>
+      <div className="nav-top">
+        <div className="nav-brand">Open-Time</div>
+        {onToggleCollapse && (
+          <NavToggle
+            className="nav-collapse-btn"
+            onClick={onToggleCollapse}
+            ariaLabel="Collapse sidebar"
+            ariaExpanded={true}
+          >
+            ‹
+          </NavToggle>
+        )}
+      </div>
       <ul className="nav-links">
         {links.map((link) => (
           <li key={link.href}>

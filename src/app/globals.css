@@ -63,6 +63,10 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Guard against page-level horizontal scroll (v2.3); the real fixes are
+     the overflow-auto wrappers and min-width:0 resets below — this is a
+     backstop, not the mechanism. */
+  overflow-x: hidden;
 }
 
 a {
@@ -89,6 +93,20 @@ h2 {
   min-height: 100vh;
 }
 
+/* .app-content wraps the top bar + main content so that on desktop it sits
+   beside the sidebar in the row flex (.app-shell), and on mobile — where the
+   sidebar becomes a fixed, off-canvas drawer removed from flow — it simply
+   fills the full width. min-width: 0 is the actual fix (not just a guard)
+   for horizontal overflow: without it, a flex row item's default
+   min-width:auto lets nested non-wrapping content (tables, the timesheet
+   grid) push this item, and the page, wider than the viewport. */
+.app-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
 .nav {
   width: 220px;
   flex-shrink: 0;
@@ -100,12 +118,126 @@ h2 {
   background: var(--surface);
 }
 
+.nav-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .nav-brand {
   font-weight: 600;
   font-size: 0.95rem;
   letter-spacing: -0.01em;
   color: var(--foreground);
   padding: 0 0.5rem;
+}
+
+/* ---------- nav chrome: collapse / drawer / top bar (v2.3) ---------- */
+
+.nav-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.nav-toggle:hover {
+  background: var(--border);
+  color: var(--foreground);
+}
+
+.nav-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Floating expand button shown only when the desktop sidebar is collapsed. */
+.nav-expand-btn {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 40;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Slim mobile top bar: hamburger + wordmark. Hidden on desktop. */
+.topbar {
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+  height: 48px;
+  flex-shrink: 0;
+  padding: 0 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 45;
+}
+
+.topbar-wordmark {
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 55;
+}
+
+@media (min-width: 900px) {
+  /* Desktop collapse: hide the sidebar entirely, floating button restores. */
+  .app-shell.nav-collapsed .nav {
+    display: none;
+  }
+  .app-shell.nav-collapsed .nav-expand-btn {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 899px) {
+  /* Below the desktop breakpoint the sidebar becomes an off-canvas drawer:
+     fixed, translated out of view by default, sliding in over a scrim. */
+  .nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.15);
+  }
+  .nav.nav-open {
+    transform: translateX(0);
+  }
+  /* The desktop-only collapse chevron and floating expand button never make
+     sense here — the drawer's own open/close affordances take over. */
+  .nav-collapse-btn,
+  .nav-expand-btn {
+    display: none;
+  }
+  .topbar {
+    display: flex;
+  }
 }
 
 .nav-links {
@@ -166,20 +298,30 @@ h2 {
 
 .app-main {
   flex: 1;
+  min-width: 0;
+  width: 100%;
   padding: 2rem;
   max-width: 1100px;
+}
+
+@media (max-width: 639px) {
+  .app-main {
+    padding: 1rem;
+  }
 }
 
 .page {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  min-width: 0;
 }
 
 .section {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -575,6 +717,13 @@ tfoot td {
   overflow-y: auto;
 }
 
+@media (max-width: 639px) {
+  .dialog {
+    width: calc(100vw - 2rem);
+    max-width: calc(100vw - 2rem);
+  }
+}
+
 .dialog-header {
   display: flex;
   align-items: center;
@@ -743,10 +892,23 @@ th.num.sortable button {
   gap: 0.85rem;
 }
 
+.month-grid-scroll {
+  overflow-x: auto;
+}
+
 .month-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 6px;
+}
+
+@media (max-width: 479px) {
+  /* Below phone-ish widths the 7 columns compress past readability; let the
+     grid keep a sane minimum and scroll horizontally inside its own
+     container instead of squeezing cells illegibly or overflowing the page. */
+  .month-grid {
+    min-width: 480px;
+  }
 }
 
 .month-weekday {
@@ -905,6 +1067,7 @@ th.num.sortable button {
 .preset-group {
   display: flex;
   gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 .btn-preset.active {
@@ -1011,6 +1174,15 @@ th.num.sortable button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--background);
+}
+
+@media (max-width: 639px) {
+  .stat-row {
+    flex-direction: column;
+  }
+  .stat-card {
+    min-width: 0;
+  }
 }
 
 .stat-value {

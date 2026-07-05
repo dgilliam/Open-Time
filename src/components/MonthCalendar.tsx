@@ -51,36 +51,38 @@ export function MonthCalendar({
           Today
         </button>
       </div>
-      <div className="month-grid">
-        {WEEKDAY_LABELS.map((w) => (
-          <div key={w} className="month-weekday">
-            {w}
-          </div>
-        ))}
-        {days.map((d) => {
-          const key = dateInputValue(d);
-          const hours = byDate.get(key) ?? 0;
-          const inMonth = d.getMonth() === monthStart.getMonth();
-          const isToday = key === today;
-          const alpha = tintAlpha(hours);
-          const className = [
-            "month-cell",
-            inMonth ? "" : "out-of-month",
-            isToday ? "today" : "",
-          ]
-            .filter(Boolean)
-            .join(" ");
-          return (
-            <div
-              key={key}
-              className={className}
-              style={alpha > 0 ? ({ "--tint-alpha": alpha } as React.CSSProperties) : undefined}
-            >
-              <span className="month-cell-date">{d.getDate()}</span>
-              {hours > 0 && <span className="month-cell-hours">{hoursLabel(hours * 3600)}</span>}
+      <div className="month-grid-scroll">
+        <div className="month-grid">
+          {WEEKDAY_LABELS.map((w) => (
+            <div key={w} className="month-weekday">
+              {w}
             </div>
-          );
-        })}
+          ))}
+          {days.map((d) => {
+            const key = dateInputValue(d);
+            const hours = byDate.get(key) ?? 0;
+            const inMonth = d.getMonth() === monthStart.getMonth();
+            const isToday = key === today;
+            const alpha = tintAlpha(hours);
+            const className = [
+              "month-cell",
+              inMonth ? "" : "out-of-month",
+              isToday ? "today" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
+            return (
+              <div
+                key={key}
+                className={className}
+                style={alpha > 0 ? ({ "--tint-alpha": alpha } as React.CSSProperties) : undefined}
+              >
+                <span className="month-cell-date">{d.getDate()}</span>
+                {hours > 0 && <span className="month-cell-hours">{hoursLabel(hours * 3600)}</span>}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
