@@ -326,6 +326,64 @@ history must survive reassignment.
   "AI Assessor", "Platform", one member unassigned) so filters are
   demonstrable.
 
+## v2.6 — Team feedback round 1 (2026-07-05)
+
+Source: first week of real usage. Three changes.
+
+### A. Day navigator + manual time on the Timer page
+
+Bug being fixed: the Timer page lists only "today", and it is the only
+IC surface for editing individual entries — so an entry re-dated to the
+past becomes unreachable (user report: "option to edit time does not
+appear if you edit date 2-3 days back").
+
+- The entries list gains a day navigator: `‹` `›` around a date label
+  ("Today", else "Thu, Jul 3"), plus a "Today" reset. Lists that local
+  day's completed entries, same edit/delete affordances.
+- New "+ Add time" button beside the navigator: opens the entry dialog
+  in CREATE mode for the viewed day (task combobox, start/stop time
+  inputs prefilled 09:00–09:30 local of that day). Uses the existing
+  POST /api/entries (no API change).
+
+### B. Task wrap-up metadata (mirrors the founder's spreadsheet)
+
+Tasks gain three OPTIONAL fields:
+
+```sql
+tasks.link TEXT           -- e.g. Slack thread URL (any http(s) URL)
+tasks.details TEXT        -- free notes
+tasks.status TEXT NOT NULL DEFAULT 'open'
+  CHECK(status IN ('open','submitted','accepted','dead_end'))
+```
+
+Additive idempotent migration (pragma-guarded ALTERs). Validation:
+link must parse as http(s) URL when non-empty (400 otherwise), ≤500
+chars; details ≤2000 chars; both trim-to-null.
+
+- PATCH `/api/tasks/[id]` `{link?, details?, status?}` — allowed for
+  admin or any user with at least one entry on that task; 403 otherwise,
+  404 unknown task. GET `/api/tasks?q=` unchanged (returns new fields).
+- Timer stop flow: after a successful stop, the UI offers a skippable
+  "Wrap up <task>?" dialog (status select: Keep open / Submitted /
+  Accepted / Dead end; link input; details textarea; Save / Skip).
+  Stopping is never blocked on it. The same dialog opens from any task
+  name click in the Timer page's entries list.
+- Status surfaces (badge styling: open=muted, submitted=amber,
+  accepted=green, dead_end=red — tokens, works in both themes):
+  admin dashboard Tasks table (badge + link icon column, sortable by
+  status) and reports task-grouping table (badge after task name,
+  link icon when present).
+- CSV export gains columns after `task`: `task_status,task_link,
+  task_details` (quoting already handles commas/newlines).
+
+### C. Deferred by decision: payment status
+
+Money bookkeeping stays in the founder's sheet (rebuilt from the CSV);
+revisit only when invoicing becomes a real feature.
+
+Execution: T18 = schema + repo + API + CSV + tests. T19 = UI (day
+navigator, add-time dialog, wrap-up dialog, badges).
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old
