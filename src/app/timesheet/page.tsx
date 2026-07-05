@@ -30,12 +30,14 @@ interface Row {
   secsByDate: Map<string, number>;
 }
 
-/** Approximate mirror of the server's task-name normalization, used only to dedupe rows client-side. */
+/**
+ * Approximate mirror of the server's task-identity matching, used only to
+ * dedupe rows client-side. Server identity is case-insensitive for both slug
+ * and free-text tasks, so this just trims, collapses whitespace, and
+ * lowercases the whole name.
+ */
 function normalizeKey(raw: string): string {
-  const trimmed = raw.trim();
-  const dash = trimmed.indexOf("-");
-  if (dash < 0) return trimmed.toLowerCase();
-  return `${trimmed.slice(0, dash).toUpperCase()}-${trimmed.slice(dash + 1).toLowerCase()}`;
+  return raw.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 /** Trims a decimal hours value for display in the edit input, e.g. 3 -> "3", 3.5 -> "3.5". */

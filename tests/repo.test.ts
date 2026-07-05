@@ -103,13 +103,10 @@ describe("task name validation and normalization", () => {
   });
 
   it.each([
-    ["too short", "ab"],
-    ["no dash", "abcdefgh"],
-    ["nothing after the dash", "abc-"],
-    ["starts with a dash", "-abc-def"],
-    ["spaces in the description", "abc-some thing"],
     ["empty string", ""],
-    ["only a dash", "-"],
+    ["whitespace only", "   "],
+    ["only a dash (1 char)", "-"],
+    ["a single character", "a"],
   ])("rejects %s (%j)", (_label, raw) => {
     expectApiError(() => repo.normalizeTaskName(raw), 400);
   });
@@ -117,6 +114,22 @@ describe("task name validation and normalization", () => {
   it("rejects names over 120 characters", () => {
     const raw = `ab-${"x".repeat(120)}`;
     expectApiError(() => repo.normalizeTaskName(raw), 400);
+  });
+
+  it("accepts free text that doesn't match the slug format, preserving casing", () => {
+    expect(repo.normalizeTaskName("Internal Meeting")).toBe("Internal Meeting");
+  });
+
+  it("collapses internal whitespace runs to a single space", () => {
+    expect(repo.normalizeTaskName("internal   meeting")).toBe("internal meeting");
+  });
+
+  it("free text that happens to have no dash is still accepted verbatim", () => {
+    expect(repo.normalizeTaskName("abcdefgh")).toBe("abcdefgh");
+  });
+
+  it("free text with spaces after a dash is accepted verbatim (not slug-shaped)", () => {
+    expect(repo.normalizeTaskName("abc-some thing")).toBe("abc-some thing");
   });
 });
 
@@ -137,6 +150,20 @@ describe("findOrCreateTask", () => {
     const first = repo.findOrCreateTask("xy9-fix-bug");
     const second = repo.findOrCreateTask("XY9-fix-bug");
     expect(second.id).toBe(first.id);
+    const all = db.prepare("SELECT COUNT(*) as c FROM tasks").get() as { c: number };
+    expect(all.c).toBe(1);
+  });
+
+  it("creates a free-text task verbatim on first use", () => {
+    const task = repo.findOrCreateTask("Internal Meeting");
+    expect(task.name).toBe("Internal Meeting");
+  });
+
+  it("matches free-text tasks case-insensitively, first-seen casing wins", () => {
+    const first = repo.findOrCreateTask("Internal Meeting");
+    const second = repo.findOrCreateTask("internal meeting");
+    expect(second.id).toBe(first.id);
+    expect(second.name).toBe("Internal Meeting");
     const all = db.prepare("SELECT COUNT(*) as c FROM tasks").get() as { c: number };
     expect(all.c).toBe(1);
   });
@@ -199,6 +226,17 @@ describe("task autocomplete scoping (/api/tasks?q=)", () => {
     }
     const tasksForA = repo.listTasksForUser(userA.id, "", 20);
     expect(tasksForA.length).toBe(20);
+  });
+
+  it("finds free-text tasks by substring", () => {
+    repo.createEntry({
+      userId: userA.id,
+      task: "Internal Meeting",
+      startedAt: "2026-01-04T09:00:00.000Z",
+      stoppedAt: "2026-01-04T10:00:00.000Z",
+    });
+    const tasksForA = repo.listTasksForUser(userA.id, "meet");
+    expect(tasksForA.map((t) => t.name)).toEqual(["Internal Meeting"]);
   });
 });
 
@@ -263,17 +301,27 @@ describe("createEntry validation and rounding", () => {
     );
   });
 
-  it("rejects an invalid task name", () => {
+  it("rejects a too-short task name", () => {
     expectApiError(
       () =>
         repo.createEntry({
           userId: userA.id,
-          task: "not a valid task",
+          task: "a",
           startedAt: "2026-01-01T09:00:00.000Z",
           stoppedAt: "2026-01-01T10:00:00.000Z",
         }),
       400
     );
+  });
+
+  it("creates a valid manual entry with a free-text task name", () => {
+    const entry = repo.createEntry({
+      userId: userA.id,
+      task: "not a valid slug",
+      startedAt: "2026-01-01T09:00:00.000Z",
+      stoppedAt: "2026-01-01T10:00:00.000Z",
+    });
+    expect(entry.taskName).toBe("not a valid slug");
   });
 });
 
@@ -799,12 +847,25 @@ describe("setTimesheetCell", () => {
     );
   });
 
-  it("rejects a malformed task name", () => {
+  it("rejects a too-short task name", () => {
     expectApiError(
-      () =>
-        repo.setTimesheetCell({ userId: userA.id, task: "not a valid task", date: "2026-01-06", hours: 2 }),
+      () => repo.setTimesheetCell({ userId: userA.id, task: "a", date: "2026-01-06", hours: 2 }),
       400
     );
+  });
+
+  it("works with a free-text task name", () => {
+    const result = repo.setTimesheetCell({
+      userId: userA.id,
+      task: "Internal Meeting",
+      date: "2026-01-06",
+      hours: 2,
+    });
+    expect(result.hours).toBe(2);
+    const entries = repo
+      .listEntries({ userId: userA.id })
+      .filter((e) => e.taskName === "Internal Meeting");
+    expect(entries.length).toBe(1);
   });
 
   it("rejects a malformed date", () => {

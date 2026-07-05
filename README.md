@@ -4,11 +4,11 @@ Minimal team time tracking for the RepoScout team.
 
 Two concepts only: **tasks** and **time**. No projects, clients, tags,
 tasks-within-tasks, or billable rates. A task is a string like
-`GM7VKNDN9Y3F-otp-resend-onboarding` (slug, dash, kebab description);
-entries attach to tasks, and durations round to the nearest half hour
-when saved. The individual contributor's entire surface is the Timer
-page: type or pick a task, hit Start. See `docs/PLAN.md` for the full
-rationale and API contract.
+`GM7VKNDN9Y3F-otp-resend-onboarding` (slug, dash, kebab description) or
+free text like `Internal Meeting`; entries attach to tasks, and durations
+round to the nearest half hour when saved. The individual contributor's
+entire surface is the Timer page: type or pick a task, hit Start. See
+`docs/PLAN.md` for the full rationale and API contract.
 
 ## Quickstart
 

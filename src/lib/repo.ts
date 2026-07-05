@@ -137,27 +137,37 @@ export function createUser(input: {
 // slug (letters/digits), a dash, then a kebab-case description.
 const TASK_NAME_RE = /^[A-Za-z0-9]+-[A-Za-z0-9][A-Za-z0-9-]*$/;
 
-/** Trims, validates, and normalizes a task name: slug uppercased, rest lowercased. */
+/**
+ * Trims, collapses internal whitespace runs to a single space, and validates
+ * length (2-120 chars). If the result matches the slug format it's
+ * normalized as before (slug uppercased, rest lowercased); otherwise it's
+ * accepted verbatim as free text (casing preserved). See "Task name rules
+ * (relaxed 2026-07-05)" in docs/PLAN.md.
+ */
 export function normalizeTaskName(raw: string): string {
-  const trimmed = (raw ?? "").trim();
-  if (trimmed.length < 3 || trimmed.length > 120) {
-    throw new ApiError(400, "task name must be between 3 and 120 characters");
+  const cleaned = (raw ?? "").trim().replace(/\s+/g, " ");
+  if (cleaned.length < 2 || cleaned.length > 120) {
+    throw new ApiError(400, "task name must be 2-120 characters");
   }
-  if (!TASK_NAME_RE.test(trimmed)) {
-    throw new ApiError(
-      400,
-      "task name must look like SLUG-description (a slug, a dash, then a kebab-case description)"
-    );
+  if (TASK_NAME_RE.test(cleaned)) {
+    const dashIndex = cleaned.indexOf("-");
+    const slug = cleaned.slice(0, dashIndex).toUpperCase();
+    const rest = cleaned.slice(dashIndex + 1).toLowerCase();
+    return `${slug}-${rest}`;
   }
-  const dashIndex = trimmed.indexOf("-");
-  const slug = trimmed.slice(0, dashIndex).toUpperCase();
-  const rest = trimmed.slice(dashIndex + 1).toLowerCase();
-  return `${slug}-${rest}`;
+  return cleaned;
 }
 
+// Task identity is case-insensitive: lookups match WHERE LOWER(name) =
+// LOWER(?) so e.g. "Internal Meeting" and "internal meeting" resolve to the
+// same task (first-seen casing wins). The tasks.name UNIQUE constraint is
+// still a plain (case-sensitive) unique index; callers must always go
+// through findOrCreateTask rather than inserting directly.
 export function findOrCreateTask(rawName: string): Task {
   const name = normalizeTaskName(rawName);
-  const existing = db.prepare("SELECT * FROM tasks WHERE name = ?").get(name) as TaskRow | undefined;
+  const existing = db.prepare("SELECT * FROM tasks WHERE LOWER(name) = LOWER(?)").get(name) as
+    | TaskRow
+    | undefined;
   if (existing) return rowToTask(existing);
 
   const id = randomUUID();
@@ -510,7 +520,7 @@ export function setTimesheetCell(input: {
   const taskName = normalizeTaskName(input.task);
 
   const txn = db.transaction((): { hours: number } => {
-    const existingTaskRow = db.prepare("SELECT id FROM tasks WHERE name = ?").get(taskName) as
+    const existingTaskRow = db.prepare("SELECT id FROM tasks WHERE LOWER(name) = LOWER(?)").get(taskName) as
       | { id: string }
       | undefined;
 

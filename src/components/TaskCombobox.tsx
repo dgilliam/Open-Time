@@ -1,9 +1,10 @@
 "use client";
 
-// Single text input for entering a task (SLUG-description). Free text is
-// always allowed — the backend find-or-creates and validates on save — but
-// while typing we show a debounced autocomplete of the current user's
-// previously-used tasks from /api/tasks?q=, navigable with the keyboard.
+// Single text input for entering a task (a slug like SLUG-description, or
+// free text). Free text is always allowed — the backend find-or-creates and
+// validates on save — but while typing we show a debounced autocomplete of
+// the current user's previously-used tasks from /api/tasks?q=, navigable
+// with the keyboard.
 
 import { useEffect, useRef, useState } from "react";
 import { listTasks } from "@/lib/api";
@@ -13,7 +14,7 @@ export function TaskCombobox({
   value,
   onChange,
   onSubmit,
-  placeholder = "SLUG-description",
+  placeholder = "task or SLUG-description",
   disabled,
   id,
   autoFocus,
