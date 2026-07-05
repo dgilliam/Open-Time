@@ -53,6 +53,9 @@ function rowToUser(row: SessionUserRow): User {
     role: row.role,
     createdAt: row.created_at,
     project: row.project ?? null,
+    // Session lookups only ever resolve non-removed users (the JOIN below
+    // excludes deleted_at rows), so this is always null here.
+    deletedAt: null,
   };
 }
 
@@ -67,7 +70,12 @@ export function createSession(userId: string): { token: string; expiresAt: strin
   return { token, expiresAt };
 }
 
-/** Resolves a raw session token to its user, or null if missing/expired. */
+/**
+ * Resolves a raw session token to its user, or null if missing/expired. The
+ * JOIN excludes removed (soft-deleted) users (docs/PLAN.md v2.7) — but
+ * removeUser also deletes the member's sessions rows outright, so a removed
+ * member's live session stops resolving even before this filter matters.
+ */
 export function getSessionUser(token: string | undefined | null): User | null {
   if (!token) return null;
   const tokenHash = hashToken(token);
@@ -77,7 +85,7 @@ export function getSessionUser(token: string | undefined | null): User | null {
               u.project as project
        FROM sessions s
        JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = ? AND s.expires_at > ?`
+       WHERE s.token_hash = ? AND s.expires_at > ? AND u.deleted_at IS NULL`
     )
     .get(tokenHash, new Date().toISOString()) as SessionUserRow | undefined;
   return row ? rowToUser(row) : null;

@@ -60,8 +60,10 @@ export function me(): Promise<User | null> {
 
 // ---------- users ----------
 
-export function listUsers(): Promise<User[]> {
-  return request<User[]>("/api/users");
+/** `includeRemoved` surfaces soft-removed members too (flagged via `deletedAt`) — see the Team page's "Show removed" toggle. */
+export function listUsers(opts: { includeRemoved?: boolean } = {}): Promise<User[]> {
+  const qs = opts.includeRemoved ? "?includeRemoved=1" : "";
+  return request<User[]>(`/api/users${qs}`);
 }
 
 export function createUser(input: {
@@ -75,6 +77,16 @@ export function createUser(input: {
 
 export function updateUser(id: string, patch: { name?: string; project?: string | null }): Promise<User> {
   return request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+/** Soft-removes a member (admin only, v2.7). Their history is untouched; login/sessions stop resolving immediately. */
+export function removeUser(id: string): Promise<User> {
+  return request<User>(`/api/users/${id}`, { method: "DELETE" });
+}
+
+/** Restores a previously removed member (admin only, v2.7). */
+export function restoreUser(id: string): Promise<User> {
+  return request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify({ restore: true }) });
 }
 
 // ---------- tasks ----------

@@ -9,6 +9,11 @@ export interface User {
   // Optional free-text label assigned by the admin (v2.5). Not a secret —
   // present regardless of caller role, but no member-facing UI renders it.
   project: string | null;
+  // Soft-delete marker (v2.7): non-null when the member has been removed by
+  // an admin. Only ever populated when listUsers({includeRemoved:true}) was
+  // used; the default listUsers omits removed rows entirely. See
+  // docs/PLAN.md v2.7.
+  deletedAt: string | null;
 }
 
 export type TaskStatus = "open" | "submitted" | "accepted" | "dead_end";

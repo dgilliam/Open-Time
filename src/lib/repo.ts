@@ -23,6 +23,7 @@ interface UserRow {
   role: Role;
   created_at: string;
   project: string | null;
+  deleted_at: string | null;
 }
 
 function rowToUser(row: UserRow): User {
@@ -33,6 +34,7 @@ function rowToUser(row: UserRow): User {
     role: row.role,
     createdAt: row.created_at,
     project: row.project ?? null,
+    deletedAt: row.deleted_at ?? null,
   };
 }
 
@@ -126,21 +128,36 @@ export function countUsers(): number {
   return (db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number }).c;
 }
 
-export function listUsers(): User[] {
-  const rows = db.prepare("SELECT * FROM users ORDER BY name ASC").all() as UserRow[];
+/**
+ * Lists users, name ASC. Removed (soft-deleted) members are excluded by
+ * default — they must vanish from every picker/filter/Team stat surface
+ * (docs/PLAN.md v2.7). Pass includeRemoved for the admin Team page's "Show
+ * removed" toggle; removed rows come back with `deletedAt` set so the caller
+ * can flag/grey them.
+ */
+export function listUsers(opts: { includeRemoved?: boolean } = {}): User[] {
+  const sql = opts.includeRemoved
+    ? "SELECT * FROM users ORDER BY name ASC"
+    : "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY name ASC";
+  const rows = db.prepare(sql).all() as UserRow[];
   return rows.map(rowToUser);
 }
 
+/** Unfiltered lookup by id (used internally by admin mutations, which must be able to find a removed user too). */
 export function getUserById(id: string): User | null {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
   return row ? rowToUser(row) : null;
 }
 
-/** Includes the password hash — for login verification only, never returned from an API route. */
+/**
+ * Includes the password hash — for login verification only, never returned
+ * from an API route. Excludes removed members: a soft-deleted member's login
+ * is blocked immediately (docs/PLAN.md v2.7).
+ */
 export function getUserAuthByEmail(email: string): (User & { passwordHash: string }) | null {
-  const row = db.prepare("SELECT * FROM users WHERE email = ?").get(email.trim().toLowerCase()) as
-    | UserRow
-    | undefined;
+  const row = db
+    .prepare("SELECT * FROM users WHERE email = ? AND deleted_at IS NULL")
+    .get(email.trim().toLowerCase()) as UserRow | undefined;
   if (!row) return null;
   return { ...rowToUser(row), passwordHash: row.password_hash };
 }
@@ -172,8 +189,18 @@ export function createUser(input: {
   if (password.length < 8) throw new ApiError(400, "password must be at least 8 characters");
   const project = normalizeProject(input.project);
 
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
-  if (existing) throw new ApiError(400, "email already in use");
+  // Email uniqueness is global — including removed members, since their row
+  // still exists (soft delete). Point the admin at restore rather than
+  // letting them create a colliding duplicate (docs/PLAN.md v2.7).
+  const existing = db.prepare("SELECT id, deleted_at FROM users WHERE email = ?").get(email) as
+    | { id: string; deleted_at: string | null }
+    | undefined;
+  if (existing) {
+    if (existing.deleted_at) {
+      throw new ApiError(400, "email belongs to a removed member — restore them instead");
+    }
+    throw new ApiError(400, "email already in use");
+  }
 
   const id = randomUUID();
   const createdAt = new Date().toISOString();
@@ -182,7 +209,7 @@ export function createUser(input: {
     "INSERT INTO users (id, name, email, password_hash, role, created_at, project) VALUES (?, ?, ?, ?, ?, ?, ?)"
   ).run(id, name, email, passwordHash, input.role, createdAt, project);
 
-  return { id, name, email, role: input.role, createdAt, project };
+  return { id, name, email, role: input.role, createdAt, project, deletedAt: null };
 }
 
 /** Admin-only patch of a member's name and/or project. 404 if the user doesn't exist. */
@@ -198,6 +225,36 @@ export function updateUser(id: string, patch: { name?: string; project?: string 
   const project = patch.project !== undefined ? normalizeProject(patch.project) : existing.project;
 
   db.prepare("UPDATE users SET name = ?, project = ? WHERE id = ?").run(name, project, id);
+  return getUserById(id)!;
+}
+
+/**
+ * Soft-removes a member (docs/PLAN.md v2.7): sets deleted_at and deletes
+ * their sessions in the same transaction, so any live session stops
+ * resolving immediately. 404 for an unknown user, 400 when the acting admin
+ * targets themselves (an admin can't remove their own account). History
+ * (entries/reports/CSV) is untouched — joins don't filter on deleted_at.
+ */
+export function removeUser(id: string, actingUserId: string): User {
+  const existing = getUserById(id);
+  if (!existing) throw new ApiError(404, "user not found");
+  if (id === actingUserId) throw new ApiError(400, "cannot remove yourself");
+
+  const deletedAt = new Date().toISOString();
+  const txn = db.transaction(() => {
+    db.prepare("UPDATE users SET deleted_at = ? WHERE id = ?").run(deletedAt, id);
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+  });
+  txn();
+  return getUserById(id)!;
+}
+
+/** Clears deleted_at, bringing a removed member back. 404 for an unknown user. */
+export function restoreUser(id: string): User {
+  const existing = getUserById(id);
+  if (!existing) throw new ApiError(404, "user not found");
+
+  db.prepare("UPDATE users SET deleted_at = NULL WHERE id = ?").run(id);
   return getUserById(id)!;
 }
 

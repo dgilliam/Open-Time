@@ -113,6 +113,13 @@ addColumnIfMissing("tasks", "link", "link TEXT");
 addColumnIfMissing("tasks", "details", "details TEXT");
 addColumnIfMissing("tasks", "status", "status TEXT NOT NULL DEFAULT 'open'");
 
+// ---------- v2.7 additive dev migration: users.deleted_at (soft-delete) ----------
+// "Remove member" is a soft delete (docs/PLAN.md v2.7): history must never be
+// rewritten by offboarding, so removed members keep their row (and all
+// joins) but are excluded from listUsers/login/session lookups by default.
+// Same idempotent PRAGMA-guarded ALTER pattern as v2.5/v2.6 above.
+addColumnIfMissing("users", "deleted_at", "deleted_at TEXT");
+
 // ---------- nightly backup schedule (production only) ----------
 // This lives here, not in instrumentation.ts: Next's dev compiler bundles
 // instrumentation for contexts where native modules can't resolve (it broke

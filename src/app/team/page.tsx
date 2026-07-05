@@ -2,9 +2,9 @@
 
 // Admin-only user list + Add member dialog. Members are redirected to /.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, createUser, listUsers, updateUser } from "@/lib/api";
+import { ApiError, createUser, listUsers, removeUser, restoreUser, updateUser } from "@/lib/api";
 import { pluralCount } from "@/lib/format";
 import type { User } from "@/lib/types";
 import { Dialog } from "@/components/Dialog";
@@ -17,6 +17,7 @@ export default function TeamPage() {
   const [loaded, setLoaded] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
+  const [showRemoved, setShowRemoved] = useState(false);
 
   useEffect(() => {
     if (user && user.role !== "admin") {
@@ -24,18 +25,49 @@ export default function TeamPage() {
     }
   }, [user, router]);
 
-  useEffect(() => {
-    if (user?.role === "admin") {
-      listUsers()
+  const refetch = useCallback(
+    (includeRemoved: boolean) => {
+      if (user?.role !== "admin") return;
+      listUsers({ includeRemoved })
         .then((u) => {
           setUsers(u);
           setLoaded(true);
         })
         .catch(() => setLoaded(true));
-    }
-  }, [user]);
+    },
+    [user]
+  );
+
+  useEffect(() => {
+    refetch(showRemoved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, showRemoved]);
 
   if (!user || user.role !== "admin") return null;
+
+  const activeUsers = users.filter((u) => !u.deletedAt);
+  const removedUsers = users.filter((u) => u.deletedAt);
+
+  async function handleRemove(target: User) {
+    if (!confirm(`Remove ${target.name}? They will no longer be able to log in, but their time entries are kept.`)) {
+      return;
+    }
+    try {
+      await removeUser(target.id);
+      refetch(showRemoved);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "failed to remove member");
+    }
+  }
+
+  async function handleRestore(target: User) {
+    try {
+      await restoreUser(target.id);
+      refetch(showRemoved);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "failed to restore member");
+    }
+  }
 
   return (
     <div className="page">
@@ -44,10 +76,21 @@ export default function TeamPage() {
         <button type="button" className="btn-primary" onClick={() => setShowAdd(true)}>
           Add member
         </button>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={showRemoved}
+            onChange={(e) => setShowRemoved(e.target.checked)}
+          />
+          Show removed
+        </label>
       </div>
       {loaded && (
         <>
-          <div className="table-count">{pluralCount(users.length, "member")}</div>
+          <div className="table-count">
+            {pluralCount(activeUsers.length, "member")}
+            {showRemoved && removedUsers.length > 0 && ` · ${pluralCount(removedUsers.length, "removed", "removed")}`}
+          </div>
           <div className="table-scroll">
             <table>
               <thead>
@@ -60,7 +103,7 @@ export default function TeamPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {activeUsers.map((u) => (
                   <tr key={u.id}>
                     <td className="strong">{u.name}</td>
                     <td>{u.email}</td>
@@ -72,9 +115,34 @@ export default function TeamPage() {
                       <button type="button" className="btn-link" onClick={() => setEditing(u)}>
                         Edit
                       </button>
+                      {u.id !== user.id && (
+                        <button
+                          type="button"
+                          className="btn-link btn-link-danger"
+                          onClick={() => handleRemove(u)}
+                        >
+                          Remove
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
+                {showRemoved &&
+                  removedUsers.map((u) => (
+                    <tr key={u.id} style={{ opacity: 0.5 }}>
+                      <td className="strong">{u.name}</td>
+                      <td>{u.email}</td>
+                      <td>
+                        <span className="badge">{u.role}</span>
+                      </td>
+                      <td className="muted">{u.project ?? "—"}</td>
+                      <td className="row-actions">
+                        <button type="button" className="btn-link" onClick={() => handleRestore(u)}>
+                          Restore
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>

@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   try {
     requireAdmin(req);
-    return NextResponse.json({ data: listUsers() });
+    const includeRemoved = req.nextUrl.searchParams.get("includeRemoved") === "1";
+    return NextResponse.json({ data: listUsers({ includeRemoved }) });
   } catch (err) {
     const { status, body } = apiErrorResponse(err);
     return NextResponse.json(body, { status });
