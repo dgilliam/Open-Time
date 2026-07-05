@@ -354,6 +354,95 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
   });
 });
 
+describe("GET /api/reports/csv?project= (v2.4 addendum, dashboard entries export)", () => {
+  it("project=<label> returns only entries of members with that project", async () => {
+    await repo.updateUser(userA.id, { project: "Platform" });
+    await repo.updateUser(userB.id, { project: "AI Assessor" });
+    await repo.createEntry({
+      userId: userA.id,
+      task: "ab46-alice-task",
+      startedAt: "2026-01-03T09:00:00.000Z",
+      stoppedAt: "2026-01-03T10:00:00.000Z",
+    });
+
+    const res = await reportsCsvRoute.GET(
+      req(`/api/reports/csv?userId=all&project=Platform`, { token: adminToken })
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    expect(lines.length).toBe(2);
+    expect(lines[1]).toBe("Alice,Platform,AB46-alice-task,1,2026-01-03");
+  });
+
+  it("project=__none__ returns only unassigned members' entries", async () => {
+    await repo.updateUser(userA.id, { project: "Platform" });
+    // userB stays unassigned; beforeEach already logged userB's entry.
+    await repo.createEntry({
+      userId: userA.id,
+      task: "ab46-alice-task",
+      startedAt: "2026-01-03T09:00:00.000Z",
+      stoppedAt: "2026-01-03T10:00:00.000Z",
+    });
+
+    const res = await reportsCsvRoute.GET(
+      req(`/api/reports/csv?userId=all&project=__none__`, { token: adminToken })
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    expect(lines.length).toBe(2);
+    expect(lines[1]).toBe("Bob,,AB1-bobs-task,1,2026-01-01");
+  });
+
+  it("composes with userId=all and no project filter (absent = off)", async () => {
+    await repo.updateUser(userA.id, { project: "Platform" });
+    await repo.createEntry({
+      userId: userA.id,
+      task: "ab46-alice-task",
+      startedAt: "2026-01-03T09:00:00.000Z",
+      stoppedAt: "2026-01-03T10:00:00.000Z",
+    });
+
+    const res = await reportsCsvRoute.GET(
+      req(`/api/reports/csv?userId=all`, { token: adminToken })
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    expect(lines.length).toBe(3);
+  });
+
+  it("a member's export stays self-scoped only, even with a project filter set", async () => {
+    await repo.updateUser(userA.id, { project: "Platform" });
+    await repo.updateUser(userB.id, { project: "Platform" });
+    await repo.createEntry({
+      userId: userA.id,
+      task: "ab46-alice-task",
+      startedAt: "2026-01-03T09:00:00.000Z",
+      stoppedAt: "2026-01-03T10:00:00.000Z",
+    });
+
+    const res = await reportsCsvRoute.GET(
+      req(`/api/reports/csv?project=Platform`, { token: tokenB })
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    // Self-scope (targetUserId defaults to Bob) still applies: only Bob's row,
+    // never Alice's, even though both share the "Platform" project.
+    expect(lines.length).toBe(2);
+    expect(lines[1]).toBe("Bob,Platform,AB1-bobs-task,1,2026-01-01");
+  });
+
+  it("403s a member attempting userId=all with a project filter", async () => {
+    const res = await reportsCsvRoute.GET(
+      req(`/api/reports/csv?userId=all&project=Platform`, { token: tokenA })
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("GET /api/tasks scoping", () => {
   it("only returns the current session user's own tasks", async () => {
     const res = await tasksRoute.GET(req("/api/tasks", { token: tokenB }));

@@ -161,9 +161,17 @@ export function getReport(opts: {
  * this directly as its href so the session cookie rides along with the
  * browser-initiated download.
  */
-export function reportsCsvUrl(opts: { userId?: string; from: string; to: string }): string {
+export function reportsCsvUrl(opts: {
+  userId?: string;
+  from: string;
+  to: string;
+  project?: string;
+}): string {
   const params = new URLSearchParams({ from: opts.from, to: opts.to });
   if (opts.userId) params.set("userId", opts.userId);
+  // Caller passes the "__none__" sentinel directly for "No project" — see
+  // the dashboard's Entries export.
+  if (opts.project) params.set("project", opts.project);
   return `/api/reports/csv?${params.toString()}`;
 }
 

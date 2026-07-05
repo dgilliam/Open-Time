@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError, deleteEntry, getReport, listEntries, listUsers } from "@/lib/api";
+import { ApiError, deleteEntry, getReport, listEntries, listUsers, reportsCsvUrl } from "@/lib/api";
 import {
   addDays,
   dateInputValue,
@@ -127,6 +127,18 @@ function presetRange(preset: Preset, customFrom: string, customTo: string): { fr
   return { from: parseLocalDate(customFrom), to: parseLocalDate(customTo) };
 }
 
+/**
+ * The exact ISO range loadAll's fetches (and the Entries CSV export link)
+ * use — a single source of truth so the two can never drift apart, same
+ * approach as /reports. `to` is bumped to the end of its calendar day so a
+ * same-day range isn't empty.
+ */
+function activeIsoRange(preset: Preset, customFrom: string, customTo: string): { from: string; to: string } {
+  const { from, to } = presetRange(preset, customFrom, customTo);
+  const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+  return { from: toIso(from), to: toIso(toEnd) };
+}
+
 export default function DashboardPage() {
   const { user } = useSession();
   const router = useRouter();
@@ -158,10 +170,7 @@ export default function DashboardPage() {
   }, [user]);
 
   const loadAll = useCallback(async () => {
-    const { from, to } = presetRange(preset, customFrom, customTo);
-    const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
-    const fromIso = toIso(from);
-    const toIsoStr = toIso(toEnd);
+    const { from: fromIso, to: toIsoStr } = activeIsoRange(preset, customFrom, customTo);
     const [userRep, taskRep, entriesList] = await Promise.all([
       getReport({ groupBy: "user", from: fromIso, to: toIsoStr }),
       getReport({ userId: "all", groupBy: "task", from: fromIso, to: toIsoStr }),
@@ -229,6 +238,17 @@ export default function DashboardPage() {
   const isCapped = entrySort.sorted.length > ENTRIES_CAP;
 
   const activeContributors = userReport?.groups.filter((g) => g.hours > 0).length ?? 0;
+
+  // Reuses activeIsoRange so the export link's range can never drift from
+  // what the Entries table above is showing; project maps the filter's
+  // "all"/"none"/label states to the API's absent/"__none__"/label param.
+  const { from: csvFrom, to: csvTo } = activeIsoRange(preset, customFrom, customTo);
+  const csvHref = reportsCsvUrl({
+    userId: entriesFilter,
+    from: csvFrom,
+    to: csvTo,
+    project: projectFilter === "all" ? undefined : projectFilter === "none" ? "__none__" : projectFilter,
+  });
 
   async function handleDeleteEntry(id: string) {
     await deleteEntry(id);
@@ -419,6 +439,9 @@ export default function DashboardPage() {
                   <option value="none">No project</option>
                 </select>
               </label>
+              <a className="btn" href={csvHref}>
+                Export CSV
+              </a>
             </div>
             <div className="table-scroll">
               <table className="entry-table">

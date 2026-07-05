@@ -236,7 +236,9 @@ export function listTasksForUser(userId: string, q: string, limit = 20): Task[] 
 
 // ---------- entries ----------
 
-export function listEntries(opts: { userId?: string; from?: string; to?: string } = {}): TimeEntry[] {
+export function listEntries(
+  opts: { userId?: string; from?: string; to?: string; project?: string | null } = {}
+): TimeEntry[] {
   const clauses: string[] = [];
   const params: unknown[] = [];
 
@@ -254,6 +256,15 @@ export function listEntries(opts: { userId?: string; from?: string; to?: string 
   if (opts.to) {
     clauses.push("e.started_at <= ?");
     params.push(opts.to);
+  }
+  // project: undefined = off; the JS value null = unassigned members only
+  // (u.project IS NULL); a string = exact, case-sensitive match on the
+  // member's CURRENT project label (see docs/PLAN.md v2.4 addendum).
+  if (opts.project === null) {
+    clauses.push("u.project IS NULL");
+  } else if (opts.project !== undefined) {
+    clauses.push("u.project = ?");
+    params.push(opts.project);
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";

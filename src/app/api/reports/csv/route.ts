@@ -30,7 +30,12 @@ export async function GET(req: NextRequest) {
     const from = params.get("from") ?? undefined;
     const to = params.get("to") ?? undefined;
 
-    const entries = listEntries({ userId: targetUserId, from, to }).filter(
+    // project: absent = off; "__none__" sentinel = unassigned members only
+    // (JS null); any other value = that project label, exact match.
+    const projectParam = params.get("project");
+    const project = projectParam === null ? undefined : projectParam === "__none__" ? null : projectParam;
+
+    const entries = listEntries({ userId: targetUserId, from, to, project }).filter(
       (e) => e.durationSecs !== null
     );
 
