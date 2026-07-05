@@ -216,6 +216,26 @@ aria-sort on the active column. Defaults unchanged (Team: hours desc,
 Tasks: recency, Entries: newest first); the 200-row entries cap applies
 after sorting.
 
+## v2.3 — Responsive layout (2026-07-05)
+
+Problem: horizontal overflow at narrow viewports (e.g. Arc/Dia browser
+side panels). Goal: no page-level horizontal scroll at any width; usable
+down to phone size. Wide content (tables, timesheet grid, heatmap)
+scrolls inside its own container, never the page.
+
+- **Nav**: desktop (≥900px) keeps the sidebar, now collapsible via a
+  button in the nav (chevron); collapsed state persisted in
+  localStorage `opentime.navCollapsed`, with a floating expand button.
+  Below 900px the sidebar becomes an off-canvas drawer, closed by
+  default, over a scrim, opened from a slim top bar (hamburger +
+  wordmark); route change or scrim tap closes it.
+- **Overflow guards**: `overflow-x: hidden` on body plus audit — every
+  table/grid/heatmap wrapped in an `overflow-x: auto` container;
+  toolbars `flex-wrap`; `.app-main` fluid width with reduced padding at
+  narrow sizes; stat cards stack under 640px; dialogs near-full-width
+  under 640px.
+- **No functional changes** — same pages, same data, same tests.
+
 ## Design system (v2 restyle, 2026-07-04)
 
 Written from scratch in our own CSS, visually inspired by cal.com's design
