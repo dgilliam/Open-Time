@@ -28,7 +28,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { useSession } from "@/components/SessionContext";
 import { UserSelect } from "@/components/UserSelect";
-import { useSortable, type SortableColumn, type SortController } from "@/components/useSortable";
+import { useSortable, type SortableColumn } from "@/components/useSortable";
+import { SortTh } from "@/components/SortTh";
 
 /** Shared shape for opening TaskWrapUpDialog from any table row (v2.6/T20). */
 interface WrapUpTarget {
@@ -91,28 +92,6 @@ const ENTRY_COLUMNS: Record<string, SortableColumn<TimeEntry>> = {
 };
 function entryTiebreak(a: TimeEntry, b: TimeEntry) {
   return a.userName.localeCompare(b.userName);
-}
-
-/** Clickable th: button + reserved-width ▲/▼ indicator, aria-sort on the active column. */
-function SortTh({
-  label,
-  sortKey,
-  controller,
-  numeric,
-}: {
-  label: string;
-  sortKey: string;
-  controller: SortController;
-  numeric?: boolean;
-}) {
-  return (
-    <th className={numeric ? "num sortable" : "sortable"} aria-sort={controller.ariaSort(sortKey)}>
-      <button type="button" onClick={() => controller.toggle(sortKey)}>
-        {label}
-        <span className="sort-indicator">{controller.indicator(sortKey) ?? ""}</span>
-      </button>
-    </th>
-  );
 }
 
 type Preset = "this-week" | "last-week" | "this-month" | "last-30" | "custom";

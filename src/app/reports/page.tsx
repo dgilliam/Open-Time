@@ -3,7 +3,7 @@
 // Presets (This week / Last week / This month) + custom range, hours-by-task
 // table. Admins can switch person or group by user instead of task.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getReport, listUsers, reportsCsvUrl } from "@/lib/api";
 import {
   addDays,
@@ -16,11 +16,34 @@ import {
   startOfWeek,
   toIso,
 } from "@/lib/format";
-import type { ReportResult, TaskStatus, User } from "@/lib/types";
+import type { ReportGroup, ReportResult, TaskStatus, User } from "@/lib/types";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { useSession } from "@/components/SessionContext";
 import { UserSelect } from "@/components/UserSelect";
+import { useSortable, type SortableColumn } from "@/components/useSortable";
+import { SortTh } from "@/components/SortTh";
+
+// Click-to-sort column configs for the two /reports groupings (docs/PLAN.md
+// v2.6/T22 addendum) — same shared useSortable hook and text-asc/numeric-
+// desc-first convention as the dashboard. Default (API recency) order is
+// preserved until a header is clicked; useSortable passes rows through
+// untouched until then.
+const TASK_GROUP_COLUMNS: Record<string, SortableColumn<ReportGroup>> = {
+  task: { accessor: (g) => g.name, defaultDir: "asc" },
+  status: { accessor: (g) => g.status ?? "open", defaultDir: "asc" },
+  dates: { accessor: (g) => g.lastWorked ?? "", defaultDir: "desc" },
+  hours: { accessor: (g) => g.hours, defaultDir: "desc" },
+};
+const USER_GROUP_COLUMNS: Record<string, SortableColumn<ReportGroup>> = {
+  user: { accessor: (g) => g.name, defaultDir: "asc" },
+  project: { accessor: (g) => g.project ?? "", defaultDir: "asc" },
+  tasks: { accessor: (g) => g.taskCount ?? 0, defaultDir: "desc" },
+  hours: { accessor: (g) => g.hours, defaultDir: "desc" },
+};
+function groupTiebreak(a: ReportGroup, b: ReportGroup) {
+  return a.name.localeCompare(b.name);
+}
 
 /** Shared shape for opening TaskWrapUpDialog from the task-grouping table (v2.6/T20). */
 interface WrapUpTarget {
@@ -111,6 +134,22 @@ export default function ReportsPage() {
   useEffect(() => {
     loadReport();
   }, [loadReport]);
+
+  // Separate useSortable instances per grouping (task vs. user) — each only
+  // ever receives rows for its own grouping, so switching groupBy naturally
+  // resets the other's inactive state without extra plumbing. Rows are
+  // passed through untouched (API recency order) until a header is clicked.
+  const taskGroupRows = useMemo(
+    () => (groupBy === "task" ? result?.groups ?? [] : []),
+    [groupBy, result]
+  );
+  const userGroupRows = useMemo(
+    () => (groupBy === "user" ? result?.groups ?? [] : []),
+    [groupBy, result]
+  );
+  const taskSort = useSortable(taskGroupRows, TASK_GROUP_COLUMNS, groupTiebreak);
+  const userSort = useSortable(userGroupRows, USER_GROUP_COLUMNS, groupTiebreak);
+  const sortedGroups = groupBy === "task" ? taskSort.sorted : userSort.sorted;
 
   if (!user) return null;
 
@@ -205,18 +244,27 @@ export default function ReportsPage() {
           <div className="table-scroll">
             <table>
               <thead>
-                <tr>
-                  <th>{groupBy === "task" ? "Task" : "User"}</th>
-                  {groupBy === "user" && <th>Project</th>}
-                  {groupBy === "task" ? <th>Dates</th> : <th className="num">Tasks</th>}
-                  <th className="num">Hours</th>
-                </tr>
+                {groupBy === "task" ? (
+                  <tr>
+                    <SortTh label="Task" sortKey="task" controller={taskSort} />
+                    <SortTh label="Status" sortKey="status" controller={taskSort} />
+                    <SortTh label="Dates" sortKey="dates" controller={taskSort} />
+                    <SortTh label="Hours" sortKey="hours" controller={taskSort} numeric />
+                  </tr>
+                ) : (
+                  <tr>
+                    <SortTh label="User" sortKey="user" controller={userSort} />
+                    <SortTh label="Project" sortKey="project" controller={userSort} />
+                    <SortTh label="Tasks" sortKey="tasks" controller={userSort} numeric />
+                    <SortTh label="Hours" sortKey="hours" controller={userSort} numeric />
+                  </tr>
+                )}
               </thead>
               <tbody>
-                {result.groups.map((g) => (
+                {sortedGroups.map((g) => (
                   <tr key={g.id}>
-                    <td className={groupBy === "task" ? "mono" : undefined}>
-                      {groupBy === "task" ? (
+                    {groupBy === "task" ? (
+                      <td className="mono">
                         <button
                           type="button"
                           className="task-name-link"
@@ -232,32 +280,31 @@ export default function ReportsPage() {
                         >
                           {g.name}
                         </button>
-                      ) : (
-                        g.name
-                      )}
-                      {groupBy === "task" && (
-                        <>
-                          {" "}
-                          <StatusBadge
-                            status={g.status ?? "open"}
-                            taskId={g.id}
-                            onSaved={loadReport}
-                            onError={(message) => setError(message)}
-                          />
-                          {g.link && (
-                            <a
-                              className="task-link-icon"
-                              href={g.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label="Task link"
-                            >
-                              ↗
-                            </a>
-                          )}
-                        </>
-                      )}
-                    </td>
+                        {g.link && (
+                          <a
+                            className="task-link-icon"
+                            href={g.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Task link"
+                          >
+                            ↗
+                          </a>
+                        )}
+                      </td>
+                    ) : (
+                      <td>{g.name}</td>
+                    )}
+                    {groupBy === "task" && (
+                      <td>
+                        <StatusBadge
+                          status={g.status ?? "open"}
+                          taskId={g.id}
+                          onSaved={loadReport}
+                          onError={(message) => setError(message)}
+                        />
+                      </td>
+                    )}
                     {groupBy === "user" && <td className="muted">{g.project ?? "—"}</td>}
                     {groupBy === "task" ? (
                       <td className="muted">{formatReportDates(g.dates)}</td>
@@ -267,9 +314,9 @@ export default function ReportsPage() {
                     <td className="num">{hoursLabel(g.hours * 3600)}</td>
                   </tr>
                 ))}
-                {result.groups.length === 0 && (
+                {sortedGroups.length === 0 && (
                   <tr>
-                    <td colSpan={groupBy === "user" ? 4 : 3} className="muted">
+                    <td colSpan={4} className="muted">
                       No entries in this range.
                     </td>
                   </tr>
@@ -280,7 +327,10 @@ export default function ReportsPage() {
                   <td>Total</td>
                   {groupBy === "user" && <td></td>}
                   {groupBy === "task" ? (
-                    <td></td>
+                    <>
+                      <td></td>
+                      <td></td>
+                    </>
                   ) : (
                     // Distinct across the team, not the per-user sum (people share tasks).
                     <td className="num">{result.distinctTaskCount}</td>
