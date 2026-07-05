@@ -203,6 +203,13 @@ Seed: bump to 5 members (add two more ICs) so the dashboard reflects the
 real team shape. Next up (not this task): admin-only export from the
 dashboard's data.
 
+Addendum (2026-07-05): all three dashboard tables get click-to-sort
+headers — client-side, text columns default asc / numeric+date columns
+default desc on first click, second click flips, ▲/▼ indicator +
+aria-sort on the active column. Defaults unchanged (Team: hours desc,
+Tasks: recency, Entries: newest first); the 200-row entries cap applies
+after sorting.
+
 ## Design system (v2 restyle, 2026-07-04)
 
 Written from scratch in our own CSS, visually inspired by cal.com's design
