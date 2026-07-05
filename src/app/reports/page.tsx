@@ -95,7 +95,14 @@ export default function ReportsPage() {
               key={p}
               type="button"
               className={preset === p ? "btn btn-preset active" : "btn btn-preset"}
-              onClick={() => setPreset(p)}
+              onClick={() => {
+                setPreset(p);
+                // Keep the From/To boxes truthful: they always display the
+                // active range, not just the last custom values.
+                const { from, to } = presetRange(p, customFrom, customTo);
+                setCustomFrom(dateInputValue(from));
+                setCustomTo(dateInputValue(to));
+              }}
             >
               {p === "this-week"
                 ? "This week"

@@ -69,7 +69,9 @@ export default function TimesheetPage() {
   const [extraRows, setExtraRows] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ rowKey: string; dateKey: string; value: string } | null>(null);
+  const [editing, setEditing] = useState<{ rowKey: string; dateKey: string; value: string; error?: boolean } | null>(
+    null
+  );
   const [addingRow, setAddingRow] = useState(false);
   const [newRowTask, setNewRowTask] = useState("");
   const cancelRef = useRef(false);
@@ -139,10 +141,14 @@ export default function TimesheetPage() {
     ? `This week · W${weekNum}`
     : `${formatShortDate(weekStart)} – ${formatShortDate(addDays(weekStart, 6))} · W${weekNum}`;
 
-  async function saveCell(row: Row, dateKey: string, rawValue: string) {
+  async function saveCell(row: Row, dateKey: string, rawValue: string, inputEl?: HTMLInputElement) {
     const parsed = parseHoursInput(rawValue);
-    if (parsed === null) {
-      setError("Enter hours like 3, 3.5, 3:30, or 3h 30m.");
+    if (parsed === null || parsed > 24) {
+      setError("Enter hours like 3, 3.5, 3:30, or 3h 30m (max 24).");
+      setEditing((prev) => (prev && prev.rowKey === row.key && prev.dateKey === dateKey ? { ...prev, error: true } : prev));
+      if (inputEl) {
+        requestAnimationFrame(() => inputEl.focus());
+      }
       return;
     }
     setEditing(null);
@@ -217,12 +223,24 @@ export default function TimesheetPage() {
                         <input
                           autoFocus
                           defaultValue={editing.value}
-                          className="timesheet-cell-input"
+                          className={editing.error ? "timesheet-cell-input cell-input-error" : "timesheet-cell-input"}
+                          onChange={(e) => {
+                            const raw = e.currentTarget.value;
+                            const sanitized = raw.replace(/[^0-9:.hm\s]/gi, "");
+                            if (sanitized !== raw) {
+                              e.currentTarget.value = sanitized;
+                            }
+                            if (editing?.error) {
+                              setError(null);
+                              setEditing((prev) => (prev ? { ...prev, error: false } : prev));
+                            }
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.currentTarget.blur();
                             } else if (e.key === "Escape") {
                               cancelRef.current = true;
+                              setError(null);
                               setEditing(null);
                             }
                           }}
@@ -231,7 +249,7 @@ export default function TimesheetPage() {
                               cancelRef.current = false;
                               return;
                             }
-                            saveCell(row, dateKey, e.currentTarget.value);
+                            saveCell(row, dateKey, e.currentTarget.value, e.currentTarget);
                           }}
                         />
                       ) : (
