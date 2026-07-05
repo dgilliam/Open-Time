@@ -147,6 +147,17 @@ export function getReport(opts: {
   return request<ReportResult>(`/api/reports?${params.toString()}`);
 }
 
+/**
+ * Builds the /api/reports/csv URL. No fetch — the "Export CSV" link uses
+ * this directly as its href so the session cookie rides along with the
+ * browser-initiated download.
+ */
+export function reportsCsvUrl(opts: { userId?: string; from: string; to: string }): string {
+  const params = new URLSearchParams({ from: opts.from, to: opts.to });
+  if (opts.userId) params.set("userId", opts.userId);
+  return `/api/reports/csv?${params.toString()}`;
+}
+
 // ---------- timesheet ----------
 
 export function setTimesheetCell(input: { task: string; date: string; hours: number }): Promise<{ hours: number }> {

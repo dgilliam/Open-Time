@@ -4,7 +4,7 @@
 // table. Admins can switch person or group by user instead of task.
 
 import { useEffect, useState } from "react";
-import { getReport, listUsers } from "@/lib/api";
+import { getReport, listUsers, reportsCsvUrl } from "@/lib/api";
 import {
   addDays,
   dateInputValue,
@@ -47,6 +47,17 @@ function presetRange(preset: Preset, customFrom: string, customTo: string): { fr
   return { from: parseLocalDate(customFrom), to: parseLocalDate(customTo) };
 }
 
+/**
+ * The exact ISO range the report fetch (and the CSV export link) use — a
+ * single source of truth so the two can never drift apart. `to` is bumped
+ * to the end of its calendar day so a same-day range isn't empty.
+ */
+function activeIsoRange(preset: Preset, customFrom: string, customTo: string): { from: string; to: string } {
+  const { from, to } = presetRange(preset, customFrom, customTo);
+  const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+  return { from: toIso(from), to: toIso(toEnd) };
+}
+
 export default function ReportsPage() {
   const { user } = useSession();
   const [users, setUsers] = useState<User[]>([]);
@@ -70,13 +81,12 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (!selectedUserId) return;
-    const { from, to } = presetRange(preset, customFrom, customTo);
-    const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+    const { from, to } = activeIsoRange(preset, customFrom, customTo);
     setError(null);
     getReport({
       userId: groupBy === "task" ? selectedUserId : undefined,
-      from: toIso(from),
-      to: toIso(toEnd),
+      from,
+      to,
       groupBy,
     })
       .then(setResult)
@@ -84,6 +94,17 @@ export default function ReportsPage() {
   }, [selectedUserId, groupBy, preset, customFrom, customTo]);
 
   if (!user) return null;
+
+  // Same rule the API uses: task grouping targets the viewed user (self for
+  // members, the selected person for admin); user grouping is admin-only and
+  // always cross-team ("all"). Reuses activeIsoRange so the link's range can
+  // never drift from what the table above is showing.
+  const { from: csvFrom, to: csvTo } = activeIsoRange(preset, customFrom, customTo);
+  const csvHref = reportsCsvUrl({
+    userId: groupBy === "task" ? selectedUserId : "all",
+    from: csvFrom,
+    to: csvTo,
+  });
 
   return (
     <div className="page">
@@ -150,6 +171,9 @@ export default function ReportsPage() {
             </label>
           </>
         )}
+        <a className="btn" href={csvHref}>
+          Export CSV
+        </a>
       </div>
       {error && <p className="error-text">{error}</p>}
       {result && (

@@ -360,7 +360,7 @@ export function stopTimer(input: { userId: string }): TimeEntry {
  * This is a documented simplification for a single-team internal tool, not
  * an oversight; revisit if the team ever spans timezones.
  */
-function localDateKey(iso: string): string {
+export function localDateKey(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

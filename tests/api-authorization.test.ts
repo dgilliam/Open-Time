@@ -20,6 +20,7 @@ const entriesRoute = await import("../src/app/api/entries/route");
 const calendarRoute = await import("../src/app/api/calendar/route");
 const usersRoute = await import("../src/app/api/users/route");
 const reportsRoute = await import("../src/app/api/reports/route");
+const reportsCsvRoute = await import("../src/app/api/reports/csv/route");
 const tasksRoute = await import("../src/app/api/tasks/route");
 
 function resetDb() {
@@ -205,6 +206,96 @@ describe("GET /api/reports?groupBy=task&userId=all authorization (v2.2 admin das
       { id: userB.id, name: "Bob", hours: 2 },
       { id: userA.id, name: "Alice", hours: 1 },
     ]);
+  });
+});
+
+describe("GET /api/reports/csv authorization and content (v2.4)", () => {
+  it("403s a member requesting userId=all", async () => {
+    const res = await reportsCsvRoute.GET(req(`/api/reports/csv?userId=all`, { token: tokenA }));
+    expect(res.status).toBe(403);
+  });
+
+  it("403s a member targeting another user's export", async () => {
+    const res = await reportsCsvRoute.GET(
+      req(`/api/reports/csv?userId=${userB.id}`, { token: tokenA })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("200s a member exporting their own entries, header row + only their rows", async () => {
+    // beforeEach already logged userB 1h on "ab1-bobs-task"; add an userA
+    // entry so we can confirm B's export doesn't leak A's row.
+    await repo.createEntry({
+      userId: userA.id,
+      task: "ab46-alice-task",
+      startedAt: "2026-01-03T09:00:00.000Z",
+      stoppedAt: "2026-01-03T10:00:00.000Z",
+    });
+
+    const res = await reportsCsvRoute.GET(req(`/api/reports/csv`, { token: tokenB }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/csv");
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    expect(lines[0]).toBe("member,task,duration_hours,date");
+    expect(lines.length).toBe(2);
+    expect(lines[1]).toBe("Bob,AB1-bobs-task,1,2026-01-01");
+  });
+
+  it("200s for admin with userId=all, containing multiple members", async () => {
+    await repo.createEntry({
+      userId: userA.id,
+      task: "ab46-alice-task",
+      startedAt: "2026-01-03T09:00:00.000Z",
+      stoppedAt: "2026-01-03T10:00:00.000Z",
+    });
+
+    const res = await reportsCsvRoute.GET(
+      req(`/api/reports/csv?userId=all`, { token: adminToken })
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    expect(lines[0]).toBe("member,task,duration_hours,date");
+    const members = lines.slice(1).map((line) => line.split(",")[0]);
+    expect(new Set(members)).toEqual(new Set(["Alice", "Bob"]));
+  });
+
+  it("CSV-escapes a free-text task containing a comma", async () => {
+    await repo.createEntry({
+      userId: userA.id,
+      task: "meeting, planning",
+      startedAt: "2026-01-04T09:00:00.000Z",
+      stoppedAt: "2026-01-04T10:00:00.000Z",
+    });
+
+    const res = await reportsCsvRoute.GET(req(`/api/reports/csv`, { token: tokenA }));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    expect(lines[1]).toBe('Alice,"meeting, planning",1,2026-01-04');
+  });
+
+  it("orders rows by date ascending", async () => {
+    await repo.createEntry({
+      userId: userB.id,
+      task: "ab48-later-task",
+      startedAt: "2026-01-05T09:00:00.000Z",
+      stoppedAt: "2026-01-05T10:00:00.000Z",
+    });
+    await repo.createEntry({
+      userId: userB.id,
+      task: "ab49-earliest-task",
+      startedAt: "2025-12-30T09:00:00.000Z",
+      stoppedAt: "2025-12-30T10:00:00.000Z",
+    });
+
+    const res = await reportsCsvRoute.GET(req(`/api/reports/csv`, { token: tokenB }));
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    const dates = lines.slice(1).map((line) => line.split(",").pop());
+    expect(dates).toEqual([...dates].sort());
   });
 });
 
