@@ -46,7 +46,12 @@ const TASK_NAMES = [
 function main() {
   console.log("Seeding database...");
 
-  db.exec("DELETE FROM time_entries; DELETE FROM sessions; DELETE FROM tasks; DELETE FROM users;");
+  // invoice_periods must be wiped too: sweeping happens only at period
+  // creation, so stale periods from a prior seed would leave every fresh
+  // entry permanently uninvoiced in the seeded data.
+  db.exec(
+    "DELETE FROM time_entries; DELETE FROM invoice_periods; DELETE FROM sessions; DELETE FROM tasks; DELETE FROM users;"
+  );
 
   const admin = repo.createUser({
     name: "Drew",

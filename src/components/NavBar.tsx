@@ -40,7 +40,12 @@ export function NavBar({
 
   const links =
     user?.role === "admin"
-      ? [{ href: "/dashboard", label: "Dashboard" }, ...BASE_LINKS, { href: "/team", label: "Team" }]
+      ? [
+          { href: "/dashboard", label: "Dashboard" },
+          { href: "/invoices", label: "Invoices" },
+          ...BASE_LINKS,
+          { href: "/team", label: "Team" },
+        ]
       : BASE_LINKS;
 
   async function handleSignOut() {

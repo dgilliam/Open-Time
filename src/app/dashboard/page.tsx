@@ -515,6 +515,7 @@ export default function DashboardPage() {
                       <td>{entry.stoppedAt ? formatTime(entry.stoppedAt) : "—"}</td>
                       <td className="num">
                         {entry.durationSecs != null ? hoursLabel(entry.durationSecs) : "—"}
+                        {entry.invoicePeriodId && <span className="muted small invoiced-marker"> · invoiced</span>}
                       </td>
                       <td className="row-actions">
                         <button type="button" className="btn-link" onClick={() => setEditing(entry)}>

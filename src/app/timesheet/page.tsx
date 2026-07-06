@@ -29,6 +29,10 @@ interface Row {
   key: string;
   displayName: string;
   secsByDate: Map<string, number>;
+  // v2.8: dates whose completed entries for this task include at least one
+  // invoice-locked entry. Cells rendered inert (no editor) when the viewer
+  // is a member; admins bypass (same rule as EntryList/the API).
+  lockedDates: Set<string>;
   // Present only for rows backed by at least one real entry (v2.6/T20) — the
   // first matching entry's task identity/wrap-up metadata, since every entry
   // in a row shares the same task. Manually-added rows with no entries yet
@@ -84,6 +88,7 @@ function parseHoursInput(raw: string): number | null {
 
 export default function TimesheetPage() {
   const { user } = useSession();
+  const isAdmin = user?.role === "admin";
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekSun(new Date()));
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [extraRows, setExtraRows] = useState<string[]>([]);
@@ -133,6 +138,7 @@ export default function TimesheetPage() {
           key,
           displayName: e.taskName,
           secsByDate: new Map(),
+          lockedDates: new Set(),
           taskId: e.taskId,
           taskStatus: e.taskStatus,
           taskLink: e.taskLink,
@@ -142,11 +148,12 @@ export default function TimesheetPage() {
       }
       const dateKey = dateInputValue(new Date(e.startedAt));
       row.secsByDate.set(dateKey, (row.secsByDate.get(dateKey) ?? 0) + (e.durationSecs ?? 0));
+      if (e.invoiceLocked) row.lockedDates.add(dateKey);
     }
     for (const name of extraRows) {
       const key = normalizeKey(name);
       if (!grouped.has(key)) {
-        grouped.set(key, { key, displayName: name, secsByDate: new Map() });
+        grouped.set(key, { key, displayName: name, secsByDate: new Map(), lockedDates: new Set() });
       }
     }
     return Array.from(grouped.values()).sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -266,9 +273,17 @@ export default function TimesheetPage() {
                 {dateKeys.map((dateKey) => {
                   const secs = row.secsByDate.get(dateKey) ?? 0;
                   const isEditing = editing?.rowKey === row.key && editing.dateKey === dateKey;
+                  // v2.8: members get an inert, quiet chip for a day whose
+                  // entries include a locked invoiced one — no click, no
+                  // message. Admins bypass (same rule as the API/EntryList).
+                  const locked = !isAdmin && row.lockedDates.has(dateKey);
                   return (
                     <td key={dateKey} className="num timesheet-cell">
-                      {isEditing ? (
+                      {locked ? (
+                        <span className="timesheet-chip timesheet-chip-locked" aria-disabled="true">
+                          {secs > 0 ? formatHoursMinutes(secs) : "-"}
+                        </span>
+                      ) : isEditing ? (
                         <input
                           autoFocus
                           defaultValue={editing.value}
