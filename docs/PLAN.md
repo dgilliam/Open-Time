@@ -432,6 +432,82 @@ Semantics:
   "Show removed" checkbox reveals removed rows greyed out with a
   Restore action.
 
+## v2.8 — Invoice periods (2026-07-06)
+
+Founder invoices Monday AM. Model the weekly cutoff as a first-class
+"invoice period": at each cutoff (Sunday 23:59 America/Los_Angeles —
+handles PST/PDT), sweep every COMPLETED, not-yet-invoiced entry whose
+started_at is before the cutoff instant into a new period. Deterministic
+by timestamp, so missed runs self-heal.
+
+### Schema (additive)
+
+```sql
+invoice_periods(id TEXT PK,
+                label TEXT NOT NULL UNIQUE,   -- week-ending date, 'YYYY-MM-DD' (the Sunday)
+                cutoff_at TEXT NOT NULL,      -- UTC instant of Sun 23:59 America/Los_Angeles
+                locked INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL)
+time_entries.invoice_period_id TEXT NULL REFERENCES invoice_periods(id)
+```
+
+### Sweep + scheduler
+
+- `createMissingPeriods()` in repo: computes every Sunday-23:59-PT cutoff
+  from the latest existing period (or, bootstrap: the most recent PAST
+  cutoff only, sweeping ALL prior history — represents "everything
+  through last Sunday was already invoiced manually") up to now; for
+  each missing one, transactionally creates the period and assigns
+  uninvoiced completed entries with started_at < cutoff. Idempotent
+  (label-unique); safe to call anytime.
+- Scheduler: db.ts boot block (same pattern as backups) runs
+  createMissingPeriods() on boot and hourly (production only,
+  OPENTIME_INVOICES!=="0"). Hourly + deterministic cutoffs = at most
+  59min late, never wrong, never double.
+- Pacific-time math implemented with Intl (no new deps) and unit-tested
+  across a DST transition.
+
+### Locking
+
+- Entries with invoice_period_id whose period is locked: members get 403
+  ("already invoiced") on PATCH/DELETE and on setTimesheetCell touching
+  any such entry. Admin bypasses. UI shows these greyed with edit/delete
+  affordances hidden for members — silent, per founder.
+- Admin can unlock/relock a period (PATCH). Unlocking lets members edit
+  the period's entries; entries STAY attached to the period (no
+  re-sweep, no double-billing). Relock restores the guard.
+- New entries backdated into an invoiced week stay uninvoiced and sweep
+  into the NEXT period (late hours bill late, never vanish). A timer
+  running across the cutoff sweeps next week once stopped.
+
+### API (admin-only except where noted)
+
+| Route | Behavior |
+|---|---|
+| GET `/api/invoices` | periods desc + per-period totalHours/memberCount, plus `current`: uninvoiced-so-far per-member totals (live preview of next sweep) |
+| GET `/api/invoices/[id]` | per-member summary (name, hours) + per-member task detail (task, hours) |
+| GET `/api/invoices/[id]/csv` | columns exactly `engineer,bill_rate,hours` — bill_rate EMPTY (founder fills rates); rows per member, hours summed from duration_secs; filename `invoice_<label>.csv` |
+| PATCH `/api/invoices/[id]` | `{locked: boolean}` |
+
+Entries payloads gain `invoicePeriodId` and `invoiceLocked` (joined) so
+member UIs can grey/hide without extra calls.
+
+### UI
+
+- New admin nav tab "Invoices" (after Dashboard): top section "Current
+  week (uninvoiced)" live per-member totals + next cutoff time; then
+  periods list (label as "Week ending Jun 29", total hours, members,
+  lock toggle, Export CSV). Expanding a period: per-member table +
+  task-detail sub-table (NOT exported).
+- Member surfaces (timer list, timesheet): invoiced+locked entries grey
+  (muted), edit/delete hidden, timesheet chips inert — no warnings.
+- Dashboard entries table: invoiced rows show a small muted "invoiced"
+  marker; admin edit still allowed.
+
+Execution: T24 backend (schema, sweep, scheduler, locks, API, tests incl.
+DST + sweep idempotency + lock authz). T25 UI (Invoices tab, greying,
+markers).
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old
