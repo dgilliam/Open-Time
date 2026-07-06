@@ -15,6 +15,7 @@ export async function PUT(req: NextRequest) {
       task: body?.task,
       date: body?.date,
       hours: body?.hours,
+      actingUser: user,
     });
     return NextResponse.json({ data: result });
   } catch (err) {

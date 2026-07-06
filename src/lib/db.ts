@@ -72,6 +72,14 @@ CREATE TABLE IF NOT EXISTS time_entries (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS invoice_periods (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL UNIQUE,
+  cutoff_at TEXT NOT NULL,
+  locked INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
@@ -120,6 +128,21 @@ addColumnIfMissing("tasks", "status", "status TEXT NOT NULL DEFAULT 'open'");
 // Same idempotent PRAGMA-guarded ALTER pattern as v2.5/v2.6 above.
 addColumnIfMissing("users", "deleted_at", "deleted_at TEXT");
 
+// ---------- v2.8 additive dev migration: time_entries.invoice_period_id ----------
+// Invoice periods (docs/PLAN.md v2.8): each completed entry gets swept into
+// a weekly invoice_periods row once its cutoff passes. SQLite allows
+// REFERENCES on an ALTER TABLE ADD COLUMN (unlike inline CHECK constraints,
+// which v2.6 found it can't retrofit), so this one line both adds the column
+// on pre-v2.8 databases and gives it the same FK the fresh CREATE TABLE
+// would have. Must run after the invoice_periods CREATE TABLE above so the
+// referenced table already exists.
+addColumnIfMissing(
+  "time_entries",
+  "invoice_period_id",
+  "invoice_period_id TEXT REFERENCES invoice_periods(id)"
+);
+db.exec("CREATE INDEX IF NOT EXISTS idx_time_entries_invoice_period ON time_entries(invoice_period_id);");
+
 // ---------- nightly backup schedule (production only) ----------
 // This lives here, not in instrumentation.ts: Next's dev compiler bundles
 // instrumentation for contexts where native modules can't resolve (it broke
@@ -148,6 +171,34 @@ if (
   }, 60_000);
   timer.unref?.();
   console.log("[backup] scheduled nightly backups (first run in ~60s, then every 24h)");
+}
+
+// ---------- invoice period sweep schedule (production only) ----------
+// Same shape as the backup schedule above: createMissingPeriods() is
+// deterministic by timestamp (docs/PLAN.md v2.8), so running it on boot and
+// hourly means a missed run just self-heals up to 59 minutes late — never
+// wrong, never double (see src/lib/invoices.ts). The dynamic import of
+// ./invoices breaks the db<->invoices module cycle at load time, identical
+// to how ./backup is loaded above.
+const INVOICES_FLAG = "__opentimeInvoicesScheduled";
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.OPENTIME_INVOICES !== "0" &&
+  !(globalThis as Record<string, unknown>)[INVOICES_FLAG]
+) {
+  (globalThis as Record<string, unknown>)[INVOICES_FLAG] = true;
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  const runInvoiceSweep = () => {
+    import("./invoices")
+      .then(({ createMissingPeriods }) => createMissingPeriods())
+      .catch((err) => console.error("[invoices] scheduled sweep failed:", err));
+  };
+  const invoiceTimer = setTimeout(() => {
+    runInvoiceSweep();
+    setInterval(runInvoiceSweep, ONE_HOUR_MS).unref?.();
+  }, 30_000);
+  invoiceTimer.unref?.();
+  console.log("[invoices] scheduled invoice period sweep (first run in ~30s, then hourly)");
 }
 
 export default db;

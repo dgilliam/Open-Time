@@ -45,6 +45,50 @@ export interface TimeEntry {
   taskStatus: TaskStatus;
   taskLink: string | null;
   taskDetails: string | null;
+  // Joined invoice period assignment (v2.8) — null until a weekly sweep
+  // claims the entry. invoiceLocked mirrors the period's `locked` flag so
+  // member-facing UIs can grey/hide edit affordances without an extra call.
+  invoicePeriodId: string | null;
+  invoiceLocked: boolean;
+}
+
+// ---------- invoice periods (v2.8) ----------
+
+export interface InvoicePeriod {
+  id: string;
+  label: string; // 'YYYY-MM-DD' — the Sunday the period ends on (week-ending date)
+  cutoffAt: string; // ISO-8601 UTC instant of Sun 23:59 America/Los_Angeles
+  locked: boolean;
+  createdAt: string;
+}
+
+export interface InvoicePeriodSummary extends InvoicePeriod {
+  totalHours: number;
+  memberCount: number;
+}
+
+export interface InvoiceMemberSummary {
+  id: string;
+  name: string;
+  hours: number;
+}
+
+export interface InvoiceTaskDetailRow {
+  member: string; // member name, not id — mirrors the CSV's "engineer" column
+  task: string;
+  hours: number;
+}
+
+export interface InvoicePeriodDetail {
+  period: InvoicePeriod;
+  members: InvoiceMemberSummary[];
+  taskDetail: InvoiceTaskDetailRow[];
+}
+
+export interface CurrentUninvoiced {
+  members: InvoiceMemberSummary[];
+  totalHours: number;
+  nextCutoffAt: string; // ISO-8601 UTC instant of the next sweep
 }
 
 export interface Contributor {

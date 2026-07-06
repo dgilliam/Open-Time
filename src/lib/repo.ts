@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { hashPassword } from "./auth";
+import { assertEntryEditable } from "./invoices";
 import { ApiError } from "./types";
 import type {
   CalendarDay,
@@ -72,6 +73,8 @@ interface EntryRow {
   task_details: string | null;
   user_name: string;
   user_project: string | null;
+  invoice_period_id: string | null;
+  invoice_period_locked: number | null;
 }
 
 function rowToEntry(row: EntryRow): TimeEntry {
@@ -89,12 +92,16 @@ function rowToEntry(row: EntryRow): TimeEntry {
     taskStatus: (row.task_status ?? "open") as TaskStatus,
     taskLink: row.task_link ?? null,
     taskDetails: row.task_details ?? null,
+    invoicePeriodId: row.invoice_period_id ?? null,
+    invoiceLocked: !!row.invoice_period_locked,
   };
 }
 
 // Entries are always joined with their task + user names (see TimeEntry.userName
 // doc comment) — cheap joins, and it keeps route handlers thin since they
-// never need a second query just to label a list for an admin view.
+// never need a second query just to label a list for an admin view. The
+// invoice_periods LEFT JOIN (v2.8) surfaces invoicePeriodId/invoiceLocked so
+// member-facing UIs can grey/hide edit affordances without an extra call.
 const ENTRY_SELECT = `
   SELECT
     e.id as id,
@@ -109,10 +116,13 @@ const ENTRY_SELECT = `
     t.link as task_link,
     t.details as task_details,
     u.name as user_name,
-    u.project as user_project
+    u.project as user_project,
+    e.invoice_period_id as invoice_period_id,
+    p.locked as invoice_period_locked
   FROM time_entries e
   JOIN tasks t ON t.id = e.task_id
   JOIN users u ON u.id = e.user_id
+  LEFT JOIN invoice_periods p ON p.id = e.invoice_period_id
 `;
 
 // ---------- rounding ----------
@@ -482,10 +492,12 @@ export function createEntry(input: {
 
 export function updateEntry(
   id: string,
-  patch: { task?: string; startedAt?: string; stoppedAt?: string | null }
+  patch: { task?: string; startedAt?: string; stoppedAt?: string | null },
+  actingUser?: { id: string; role: Role }
 ): TimeEntry {
   const existing = getEntry(id);
   if (!existing) throw new ApiError(404, "entry not found");
+  assertEntryEditable(existing.invoicePeriodId, actingUser);
 
   const startedAt = patch.startedAt !== undefined ? patch.startedAt : existing.startedAt;
   const stoppedAt = patch.stoppedAt !== undefined ? patch.stoppedAt : existing.stoppedAt;
@@ -503,9 +515,10 @@ export function updateEntry(
   return getEntry(id)!;
 }
 
-export function deleteEntry(id: string): void {
+export function deleteEntry(id: string, actingUser?: { id: string; role: Role }): void {
   const existing = getEntry(id);
   if (!existing) throw new ApiError(404, "entry not found");
+  assertEntryEditable(existing.invoicePeriodId, actingUser);
   db.prepare("DELETE FROM time_entries WHERE id = ?").run(id);
 }
 
@@ -755,6 +768,7 @@ export function setTimesheetCell(input: {
   task: string;
   date: string;
   hours: number;
+  actingUser?: { id: string; role: Role };
 }): { hours: number } {
   if (!input.userId) throw new ApiError(400, "userId is required");
   if (typeof input.hours !== "number" || !Number.isFinite(input.hours)) {
@@ -779,14 +793,23 @@ export function setTimesheetCell(input: {
     if (existingTaskRow) {
       const rows = db
         .prepare(
-          `SELECT id, started_at FROM time_entries
+          `SELECT id, started_at, invoice_period_id FROM time_entries
            WHERE user_id = ? AND task_id = ? AND stopped_at IS NOT NULL`
         )
-        .all(input.userId, existingTaskRow.id) as { id: string; started_at: string }[];
-      for (const row of rows) {
-        if (localDateKey(row.started_at) === input.date) {
-          db.prepare("DELETE FROM time_entries WHERE id = ?").run(row.id);
-        }
+        .all(input.userId, existingTaskRow.id) as {
+        id: string;
+        started_at: string;
+        invoice_period_id: string | null;
+      }[];
+      const matching = rows.filter((row) => localDateKey(row.started_at) === input.date);
+      // Check every affected entry for a locked invoice period BEFORE deleting
+      // any of them — a 403 must leave the cell untouched, not partially
+      // cleared (docs/PLAN.md v2.8 locking).
+      for (const row of matching) {
+        assertEntryEditable(row.invoice_period_id, input.actingUser);
+      }
+      for (const row of matching) {
+        db.prepare("DELETE FROM time_entries WHERE id = ?").run(row.id);
       }
     }
 

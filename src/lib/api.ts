@@ -1,6 +1,16 @@
 // Small typed fetch client wrapping the /api contract described in docs/PLAN.md.
 import { ApiError } from "./types";
-import type { CalendarDay, ReportResult, Task, TimeEntry, User } from "./types";
+import type {
+  CalendarDay,
+  CurrentUninvoiced,
+  InvoicePeriod,
+  InvoicePeriodDetail,
+  InvoicePeriodSummary,
+  ReportResult,
+  Task,
+  TimeEntry,
+  User,
+} from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -199,6 +209,28 @@ export function reportsCsvUrl(opts: {
 
 export function setTimesheetCell(input: { task: string; date: string; hours: number }): Promise<{ hours: number }> {
   return request<{ hours: number }>("/api/timesheet/cell", { method: "PUT", body: JSON.stringify(input) });
+}
+
+// ---------- invoices (v2.8, admin only) ----------
+
+export function listInvoices(): Promise<{ periods: InvoicePeriodSummary[]; current: CurrentUninvoiced }> {
+  return request<{ periods: InvoicePeriodSummary[]; current: CurrentUninvoiced }>("/api/invoices");
+}
+
+export function getInvoicePeriod(id: string): Promise<InvoicePeriodDetail> {
+  return request<InvoicePeriodDetail>(`/api/invoices/${id}`);
+}
+
+export function setInvoicePeriodLocked(id: string, locked: boolean): Promise<InvoicePeriod> {
+  return request<InvoicePeriod>(`/api/invoices/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ locked }),
+  });
+}
+
+/** Builds the /api/invoices/[id]/csv URL — used directly as an <a href> so the session cookie rides along. */
+export function invoiceCsvUrl(id: string): string {
+  return `/api/invoices/${id}/csv`;
 }
 
 export { ApiError };

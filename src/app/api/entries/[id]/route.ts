@@ -17,11 +17,15 @@ export async function PATCH(
     assertSelfOrAdmin(user, existing.userId);
 
     const body = await req.json();
-    const entry = updateEntry(id, {
-      task: body?.task,
-      startedAt: body?.startedAt,
-      stoppedAt: body?.stoppedAt,
-    });
+    const entry = updateEntry(
+      id,
+      {
+        task: body?.task,
+        startedAt: body?.startedAt,
+        stoppedAt: body?.stoppedAt,
+      },
+      user
+    );
     return NextResponse.json({ data: entry });
   } catch (err) {
     const { status, body: errBody } = apiErrorResponse(err);
@@ -40,7 +44,7 @@ export async function DELETE(
     if (!existing) throw new ApiError(404, "entry not found");
     assertSelfOrAdmin(user, existing.userId);
 
-    deleteEntry(id);
+    deleteEntry(id, user);
     return NextResponse.json({ data: { id } });
   } catch (err) {
     const { status, body: errBody } = apiErrorResponse(err);

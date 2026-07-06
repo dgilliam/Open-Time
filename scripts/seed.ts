@@ -1,5 +1,6 @@
 import { db } from "../src/lib/db";
 import * as repo from "../src/lib/repo";
+import { createMissingPeriods, currentUninvoiced, listInvoicePeriods } from "../src/lib/invoices";
 
 function isoDaysAgo(daysAgo: number, hour: number, minute = 0): string {
   const d = new Date();
@@ -181,6 +182,34 @@ function main() {
   console.log(
     `Projects: ${memberDefs.map((m) => `${m.name} (${m.project ?? "unassigned"})`).join(", ")}.`
   );
+
+  // v2.8 invoice periods: a single createMissingPeriods() call against an
+  // empty invoice_periods table only ever bootstraps ONE period (the most
+  // recent past cutoff, sweeping all prior history) — real production
+  // semantics for a team invoicing for the first time. To demo 8-9 realistic
+  // *weekly* historical periods matching the 10 weeks of seeded entries
+  // above, we instead replay the same weekly-hourly-sweep behavior the
+  // production scheduler would produce over those weeks: one call per
+  // simulated week, stepping forward to the fixed `now` this seed run
+  // started at. The final call (at the real `now`) leaves the current
+  // partial week uninvoiced, as intended.
+  const now = new Date();
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  // 8 simulated calls (bootstrap + 7 incremental) + the final real-`now`
+  // call = 9 historical periods, each crossing exactly one weekly cutoff.
+  for (let weeksAgo = 8; weeksAgo >= 1; weeksAgo--) {
+    createMissingPeriods(new Date(now.getTime() - weeksAgo * WEEK_MS));
+  }
+  createMissingPeriods(now);
+
+  const periods = listInvoicePeriods();
+  const current = currentUninvoiced(now);
+  console.log(
+    `Invoice periods: ${periods.length} historical period(s)` +
+      (periods[0] ? ` (most recent: week ending ${periods[0].label}, ${periods[0].totalHours.toFixed(1)}h)` : "") +
+      `; current week uninvoiced: ${current.totalHours.toFixed(1)}h across ${current.members.length} member(s), next cutoff ${current.nextCutoffAt}.`
+  );
+
   console.log("Admin login: drew@gilli.am / opentime-dev");
   console.log(`Member logins: ${members.map((m) => m.email).join(", ")} / password123`);
 }
