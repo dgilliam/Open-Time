@@ -508,6 +508,46 @@ Execution: T24 backend (schema, sweep, scheduler, locks, API, tests incl.
 DST + sweep idempotency + lock authz). T25 UI (Invoices tab, greying,
 markers).
 
+## v2.9 — Feedback round 2 (2026-07-06)
+
+Small fixes from IC feedback. The larger "merge Timer/Timesheet/Calendar
+into one week view" idea was deferred by the founder (keep the three tabs
+for now); revisit as a future redesign.
+
+### A. New task status: `draft`
+
+Adds a fifth status between open and submitted:
+`open → draft → submitted → accepted → dead_end`. Draft = written up but
+not yet sent for review.
+- TaskStatus type + StatusBadge LABELS + STATUS_CYCLE + TaskWrapUpDialog
+  select gain "draft" (label "Draft"; badge a slate/blue soft tone,
+  distinct from submitted's amber, works in both themes).
+- Repo validation set in updateTask accepts "draft". CREATE TABLE CHECK
+  in db.ts adds 'draft' (for fresh DBs). NOTE: existing production DBs
+  have NO CHECK on status (v2.6 added the column via ALTER, which can't
+  carry a CHECK; the enum is enforced in the repo layer) — so no
+  migration is needed, just the repo + CREATE TABLE update.
+- Reports/dashboard sort by status string still works (draft sorts
+  alphabetically among the others — acceptable, matches existing note).
+
+### B. Entry add/edit dialog → side drawer (fixes "modal covers my entries")
+
+The centered EntryDialog covers the Today list, so you can't see what
+you already logged while adding. Give the shared Dialog a
+`variant="drawer"` mode: right-anchored full-height panel, lighter
+backdrop (rgba .25) so the entry list stays visible behind it; on ≤640px
+it becomes a bottom sheet (full width, max 85vh, slides up). EntryDialog
+opts into drawer variant. All other Dialog callers (wrap-up, team, add
+member) keep the default centered modal — unchanged.
+
+### C. Add-row bug — NOT reproduced
+
+Could not reproduce "add row doesn't work" across desktop, the
+partial-suggestion path, or 760px narrow (row added every time). Pending
+founder repro details before any fix. Suspected real rough edge if it's
+this: empty added rows are client-only (extraRows) and vanish on reload
+or week-nav — but that's unconfirmed as the reported issue.
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old
