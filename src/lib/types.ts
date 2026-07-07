@@ -16,7 +16,7 @@ export interface User {
   deletedAt: string | null;
 }
 
-export type TaskStatus = "open" | "submitted" | "accepted" | "dead_end";
+export type TaskStatus = "open" | "draft" | "submitted" | "accepted" | "dead_end";
 
 export interface Task {
   id: string;

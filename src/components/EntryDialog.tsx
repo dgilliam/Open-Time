@@ -62,7 +62,7 @@ export function EntryDialog({
   }
 
   return (
-    <Dialog title={isCreate ? "Add time" : "Edit entry"} onClose={onClose}>
+    <Dialog title={isCreate ? "Add time" : "Edit entry"} onClose={onClose} variant="drawer">
       <form className="form" onSubmit={handleSubmit}>
         <label>
           Task

@@ -59,7 +59,10 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at TEXT NOT NULL,
   link TEXT,
   details TEXT,
-  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','submitted','accepted','dead_end'))
+  -- 'draft' added v2.9 section A: existing DBs got the status column via an
+  -- ALTER (see v2.6), which SQLite can't attach a CHECK to, so no migration
+  -- is needed here -- the enum is enforced in the repo layer (TASK_STATUSES).
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','draft','submitted','accepted','dead_end'))
 );
 
 CREATE TABLE IF NOT EXISTS time_entries (

@@ -13,6 +13,7 @@ import { Dialog } from "./Dialog";
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "open", label: "Keep open" },
+  { value: "draft", label: "Draft" },
   { value: "submitted", label: "Submitted" },
   { value: "accepted", label: "Accepted" },
   { value: "dead_end", label: "Dead end" },

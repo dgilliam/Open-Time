@@ -15,13 +15,14 @@ import type { TaskStatus } from "@/lib/types";
 
 const LABELS: Record<TaskStatus, string> = {
   open: "Open",
+  draft: "Draft",
   submitted: "Submitted",
   accepted: "Accepted",
   dead_end: "Dead end",
 };
 
-/** Click-to-cycle order (v2.6 T21 addendum). */
-export const STATUS_CYCLE: TaskStatus[] = ["open", "submitted", "accepted", "dead_end"];
+/** Click-to-cycle order (v2.6 T21 addendum; 'draft' inserted v2.9 section A). */
+export const STATUS_CYCLE: TaskStatus[] = ["open", "draft", "submitted", "accepted", "dead_end"];
 
 export function nextStatus(status: TaskStatus): TaskStatus {
   const i = STATUS_CYCLE.indexOf(status);

@@ -727,6 +727,12 @@ tfoot td {
   border: 1px solid var(--border);
 }
 
+/* v2.9 section A: slate/indigo-blue tone, distinct from submitted's amber. */
+.status-badge-draft {
+  background: color-mix(in srgb, #4338ca 18%, var(--surface));
+  color: #4338ca;
+}
+
 .status-badge-submitted {
   background: color-mix(in srgb, #b45309 18%, var(--surface));
   color: #b45309;
@@ -817,6 +823,68 @@ tfoot td {
   .dialog {
     width: calc(100vw - 2rem);
     max-width: calc(100vw - 2rem);
+  }
+}
+
+/* ---------- dialog, drawer variant (v2.9 section B) ---------- */
+/* Right-anchored full-height panel; lighter backdrop so the page behind
+   (e.g. the Timer entries list) stays visible. Becomes a bottom sheet on
+   narrow viewports. */
+
+.dialog-backdrop-drawer {
+  background: rgba(0, 0, 0, 0.25);
+  justify-content: flex-end;
+  align-items: stretch;
+  padding: 0;
+}
+
+.dialog-drawer {
+  height: 100vh;
+  max-height: none;
+  width: min(440px, 100%);
+  max-width: min(440px, 100%);
+  border-radius: 0;
+  border-left: 1px solid var(--border);
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  overflow-y: auto;
+  animation: dialog-drawer-slide-in 0.18s ease-out;
+}
+
+@keyframes dialog-drawer-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .dialog-backdrop-drawer {
+    align-items: flex-end;
+    justify-content: stretch;
+  }
+
+  .dialog-drawer {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 85vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation: dialog-drawer-slide-up 0.18s ease-out;
+  }
+}
+
+@keyframes dialog-drawer-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 

@@ -414,7 +414,7 @@ describe("updateTask (v2.6 wrap-up metadata)", () => {
     );
   });
 
-  it.each(["open", "submitted", "accepted", "dead_end"])("accepts status %s", (status) => {
+  it.each(["open", "draft", "submitted", "accepted", "dead_end"])("accepts status %s", (status) => {
     const task = repo.findOrCreateTask(`ab55-status-${status}`);
     const updated = repo.updateTask(task.id, { id: admin.id, role: "admin" }, { status });
     expect(updated.status).toBe(status);

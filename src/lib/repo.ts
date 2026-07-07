@@ -317,7 +317,7 @@ export function getTaskById(id: string): Task | null {
   return row ? rowToTask(row) : null;
 }
 
-export const TASK_STATUSES: TaskStatus[] = ["open", "submitted", "accepted", "dead_end"];
+export const TASK_STATUSES: TaskStatus[] = ["open", "draft", "submitted", "accepted", "dead_end"];
 
 /** True when `value` parses as an http/https URL. */
 function isHttpUrl(value: string): boolean {
@@ -357,7 +357,7 @@ export function updateTask(
   let status = existing.status;
   if (patch.status !== undefined) {
     if (!TASK_STATUSES.includes(patch.status as TaskStatus)) {
-      throw new ApiError(400, "status must be one of open, submitted, accepted, dead_end");
+      throw new ApiError(400, "status must be one of open, draft, submitted, accepted, dead_end");
     }
     status = patch.status as TaskStatus;
   }
