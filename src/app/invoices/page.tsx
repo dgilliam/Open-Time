@@ -54,6 +54,7 @@ export default function InvoicesPage() {
 
   const [periods, setPeriods] = useState<InvoicePeriodSummary[]>([]);
   const [current, setCurrent] = useState<CurrentUninvoiced | null>(null);
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +71,7 @@ export default function InvoicesPage() {
     const result = await listInvoices();
     setPeriods(result.periods);
     setCurrent(result.current);
+    setLastBackup(result.lastBackup);
   }, []);
 
   useEffect(() => {
@@ -176,7 +178,11 @@ export default function InvoicesPage() {
               </tfoot>
             </table>
           </div>
-          <p className="muted small">Next cutoff: {formatNextCutoff(current.nextCutoffAt)}</p>
+          <p className="muted small">
+            Next cutoff: {formatNextCutoff(current.nextCutoffAt)}
+            {" · "}
+            {lastBackup ? `Last backup: ${formatShortDate(parseLocalDate(lastBackup))}` : "No backups yet"}
+          </p>
         </section>
       )}
 

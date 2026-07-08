@@ -10,7 +10,7 @@ process.env.OPENTIME_DB = tmpDbPath;
 // Imported after OPENTIME_DB is set so db.ts opens the temp file.
 const { db } = await import("../src/lib/db");
 const repo = await import("../src/lib/repo");
-const { runBackup } = await import("../src/lib/backup");
+const { runBackup, latestBackupDate } = await import("../src/lib/backup");
 
 const tmpDirs: string[] = [];
 function makeTmpDir(label: string): string {
@@ -106,6 +106,25 @@ describe("runBackup", () => {
     expect(remaining).toContain(path.basename(result.path));
     expect(remaining).toContain("opentime-2020-01-04.db");
     expect(fs.existsSync(path.join(dir, "not-a-backup.txt"))).toBe(true);
+  });
+
+  it("latestBackupDate returns null before any backup, then the newest stamp", async () => {
+    const dir = makeTmpDir("latest-date");
+    expect(latestBackupDate(dir)).toBeNull(); // dir doesn't even exist yet
+
+    fs.mkdirSync(dir, { recursive: true });
+    expect(latestBackupDate(dir)).toBeNull(); // empty dir
+
+    for (const stamp of ["2020-01-02", "2020-01-04", "2020-01-03"]) {
+      fs.writeFileSync(path.join(dir, `opentime-${stamp}.db`), "");
+    }
+    fs.writeFileSync(path.join(dir, "not-a-backup.txt"), "");
+    expect(latestBackupDate(dir)).toBe("2020-01-04");
+
+    // A real run bumps it to today's stamp.
+    repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+    await runBackup({ dir });
+    expect(latestBackupDate(dir)).toBe(new Date().toISOString().slice(0, 10));
   });
 
   it("defaults the backup directory from OPENTIME_BACKUP_DIR", async () => {

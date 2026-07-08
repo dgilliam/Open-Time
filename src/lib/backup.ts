@@ -31,6 +31,23 @@ function resolveKeep(keep?: number): number {
 }
 
 /**
+ * Date stamp (YYYY-MM-DD) of the newest snapshot on disk, or null when no
+ * backups exist yet. Read straight from the filenames so it stays accurate
+ * regardless of which process wrote the snapshot.
+ */
+export function latestBackupDate(dir?: string): string | null {
+  const resolved = resolveDir(dir);
+  let files: string[];
+  try {
+    files = fs.readdirSync(resolved);
+  } catch {
+    return null; // backup dir not created yet
+  }
+  const newest = files.filter((f) => FILENAME_RE.test(f)).sort().reverse()[0];
+  return newest ? newest.slice("opentime-".length, -".db".length) : null;
+}
+
+/**
  * Writes a consistent online snapshot of the live database using
  * better-sqlite3's native `db.backup()` (safe to run while the app is
  * serving traffic), then prunes older same-pattern snapshots beyond the

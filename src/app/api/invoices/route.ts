@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
+import { latestBackupDate } from "@/lib/backup";
 import { currentUninvoiced, listInvoicePeriods } from "@/lib/invoices";
 import { apiErrorResponse } from "@/lib/types";
 
@@ -11,7 +12,8 @@ export async function GET(req: NextRequest) {
     requireAdmin(req);
     const periods = listInvoicePeriods();
     const current = currentUninvoiced();
-    return NextResponse.json({ data: { periods, current } });
+    const lastBackup = latestBackupDate();
+    return NextResponse.json({ data: { periods, current, lastBackup } });
   } catch (err) {
     const { status, body } = apiErrorResponse(err);
     return NextResponse.json(body, { status });

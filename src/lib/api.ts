@@ -213,8 +213,16 @@ export function setTimesheetCell(input: { task: string; date: string; hours: num
 
 // ---------- invoices (v2.8, admin only) ----------
 
-export function listInvoices(): Promise<{ periods: InvoicePeriodSummary[]; current: CurrentUninvoiced }> {
-  return request<{ periods: InvoicePeriodSummary[]; current: CurrentUninvoiced }>("/api/invoices");
+export function listInvoices(): Promise<{
+  periods: InvoicePeriodSummary[];
+  current: CurrentUninvoiced;
+  lastBackup: string | null; // YYYY-MM-DD of the newest on-disk snapshot
+}> {
+  return request<{
+    periods: InvoicePeriodSummary[];
+    current: CurrentUninvoiced;
+    lastBackup: string | null;
+  }>("/api/invoices");
 }
 
 export function getInvoicePeriod(id: string): Promise<InvoicePeriodDetail> {
