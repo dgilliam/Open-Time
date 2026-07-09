@@ -548,6 +548,57 @@ founder repro details before any fix. Suspected real rough edge if it's
 this: empty added rows are client-only (extraRows) and vanish on reload
 or week-nav — but that's unconfirmed as the reported issue.
 
+## v3.0 — Merged Week view (2026-07-09)
+
+Founder-approved redesign from team feedback: Timer, Timesheet, and
+Calendar merge into ONE page. Rationale: all three showed the same data,
+and per-day totals structurally hid intra-day breaks ("4h on the timer
+but there was a 1h break I want to edit").
+
+### The Week page (new `/`, all roles, self-only data)
+
+- Timer bar unchanged at top (combobox → Start; running state as today).
+- Below: a Week | Month toggle (default Week).
+- WEEK MODE: seven Sun-first day columns (matching the old timesheet's
+  week convention), `‹` `›` week nav + "This week" reset, week total.
+  Each column: day label + that day's total, then the day's completed
+  entries as CARDS ordered by start time: task name (mono, clickable →
+  wrap-up dialog), start–stop times, rounded duration, StatusBadge when
+  status ≠ open (interactive cycle as elsewhere). Entry card click
+  target (outside task name / badge) opens the EDIT drawer. A running
+  timer renders as a live accent-highlighted card in today's column.
+  A `+` button in each column header opens the ADD drawer prefilled
+  09:00–09:30 that day. Invoice-locked entries: greyed card, no edit
+  affordance for members (admins unaffected) — same rules as EntryList.
+- MONTH MODE: the existing MonthCalendar + Heatmap components, reused
+  verbatim (self-only; the admin person-selector stays on the admin
+  dashboard side and is out of scope here).
+- Mobile (≤640px): columns stack vertically as day sections, today
+  first-scrolled; everything else identical.
+
+### Retirements
+
+- `/timesheet` and `/calendar` pages are REMOVED; both paths redirect
+  to `/` (next.config redirects or tiny redirect pages — executor's
+  call, note which). Nav for members becomes: Week, Reports. Admin nav:
+  Dashboard, Week, Invoices, Reports, Team.
+- The timesheet grid's cell-entry and "+ Add row" mechanisms retire with
+  it — per-day `+` on the Week page replaces backfill entry. This also
+  moots the unreproduced "add row doesn't work" report.
+- PUT /api/timesheet/cell and its repo function/tests STAY (API is
+  backward compatible; nothing else consumes it yet — flag for future
+  cleanup once the redesign has survived team contact).
+
+### Non-changes
+
+Zero backend/API changes. EntryDialog drawer, TaskWrapUpDialog,
+StatusBadge, MonthCalendar, Heatmap, DayNav conventions all reused.
+Tests: 218 must stay green untouched.
+
+Execution: T27 = Week page core (columns, cards, totals, timer
+integration, drawers, locking). T28 = Month toggle, retirements,
+redirects, nav, README sync.
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old
