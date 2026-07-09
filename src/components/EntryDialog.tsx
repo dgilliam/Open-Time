@@ -7,13 +7,27 @@
 // Edit mode: pass `entry`. Create mode (v2.6 section A, "+ Add time"): pass
 // `createDefaults` instead — prefilled start/stop for the viewed day, empty
 // task via TaskCombobox, saved via POST /api/entries.
+//
+// Edit mode also exposes the task's wrap-up fields (status/link/details,
+// v2.6 section B) so an entry can be fully groomed in one place. They PATCH
+// the task only when actually edited — otherwise switching an entry to a
+// different task would silently stamp the old task's metadata onto it. The
+// entry saves first so the PATCH targets the (possibly re-pointed) task.
 
 import { useState } from "react";
-import { ApiError, createEntry, updateEntry } from "@/lib/api";
+import { ApiError, createEntry, updateEntry, updateTask } from "@/lib/api";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/lib/format";
-import type { TimeEntry } from "@/lib/types";
+import type { TaskStatus, TimeEntry } from "@/lib/types";
 import { Dialog } from "./Dialog";
 import { TaskCombobox } from "./TaskCombobox";
+
+const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
+  { value: "open", label: "Open" },
+  { value: "draft", label: "Draft" },
+  { value: "submitted", label: "Submitted" },
+  { value: "accepted", label: "Accepted" },
+  { value: "dead_end", label: "Dead end" },
+];
 
 export function EntryDialog({
   entry,
@@ -34,8 +48,17 @@ export function EntryDialog({
   const [stoppedAt, setStoppedAt] = useState(
     entry ? (entry.stoppedAt ? toDatetimeLocalValue(entry.stoppedAt) : "") : createDefaults?.stoppedAt ?? ""
   );
+  const [status, setStatus] = useState<TaskStatus>(entry?.taskStatus ?? "open");
+  const [link, setLink] = useState(entry?.taskLink ?? "");
+  const [details, setDetails] = useState(entry?.taskDetails ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const wrapUpDirty =
+    !isCreate &&
+    (status !== (entry.taskStatus ?? "open") ||
+      link !== (entry.taskLink ?? "") ||
+      details !== (entry.taskDetails ?? ""));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,6 +76,9 @@ export function EntryDialog({
             startedAt: fromDatetimeLocalValue(startedAt),
             stoppedAt: stoppedAt ? fromDatetimeLocalValue(stoppedAt) : null,
           });
+      if (wrapUpDirty) {
+        await updateTask(saved.taskId, { status, link, details });
+      }
       onSaved(saved);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "failed to save entry");
@@ -87,6 +113,33 @@ export function EntryDialog({
             onChange={(e) => setStoppedAt(e.target.value)}
           />
         </label>
+        {!isCreate && (
+          <>
+            <label>
+              Status
+              <select value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)}>
+                {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Link
+              <input
+                type="url"
+                placeholder="https://reposcout.slack.com/…"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+              />
+            </label>
+            <label>
+              Details
+              <textarea rows={3} value={details} onChange={(e) => setDetails(e.target.value)} />
+            </label>
+          </>
+        )}
         {error && <p className="error-text">{error}</p>}
         <div className="dialog-actions">
           <button type="button" className="btn" onClick={onClose}>
