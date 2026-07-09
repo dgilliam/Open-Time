@@ -7,8 +7,8 @@ tasks-within-tasks, or billable rates. A task is a string like
 `GM7VKNDN9Y3F-otp-resend-onboarding` (slug, dash, kebab description) or
 free text like `Internal Meeting`; entries attach to tasks, and durations
 round to the nearest half hour when saved. The individual contributor's
-entire surface is one Week page: type or pick a task, hit Start, and see
-the week's entries as cards below. See `docs/PLAN.md` for the full
+entire surface is one Time entry page: type or pick a task, hit Start,
+and see the week's entries as cards below. See `docs/PLAN.md` for the full
 rationale and API contract.
 
 ## Quickstart
@@ -39,13 +39,15 @@ there is no self-registration.
 
 ## Pages
 
-- **Week** (`/`) — task autocomplete (your previously used tasks),
-  start/stop timer, then a Week | Month toggle. Week mode: seven Sun-first
-  day columns with that day's completed entries as cards (task, start–stop,
-  duration, status badge), a `+` per column to backfill time, and a live
-  card for a running timer. Month mode: month grid with rounded hours per
-  day, plus a GitHub-style 12-month activity heatmap. Both modes are
-  self-only. `/timesheet` and `/calendar` redirect here.
+- **Time entry** (`/`) — task autocomplete (your previously used tasks),
+  start/stop timer, then a Week | Timesheet | Month toggle. Week mode:
+  seven Sun-first day columns with that day's completed entries as compact
+  cards (task, rounded hours, status badge, wrap-up indicators), a `+` per
+  column to backfill time, and a live card for a running timer. Timesheet
+  mode: one row per task with editable hours per day, plus `+ Add row`.
+  Month mode: month grid with rounded hours per day, plus a GitHub-style
+  12-month activity heatmap. All modes are self-only. `/timesheet` and
+  `/calendar` redirect here.
 - **Reports** — hours by task over a date range; admin can view any
   member or group by user.
 - **Dashboard** (admin) — team-wide stats, per-contributor and per-task

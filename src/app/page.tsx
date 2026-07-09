@@ -162,7 +162,7 @@ export default function Home() {
 
   return (
     <div className="page">
-      <h1>Week</h1>
+      <h1>Time entry</h1>
       <TimerBar
         running={running}
         taskInput={taskInput}

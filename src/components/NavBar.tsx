@@ -12,8 +12,8 @@
 // collapse chevron at the top; `open` just adds the class the drawer's CSS
 // transform keys off of.
 //
-// v3.0: Timer/Timesheet/Calendar merged into the single Week page at "/";
-// those three nav entries collapse to one "Week" entry.
+// v3.0: Timer/Timesheet/Calendar merged into a single page at "/"; those
+// three nav entries collapse to one "Time entry" entry.
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -22,7 +22,7 @@ import { useSession } from "./SessionContext";
 import { NavToggle } from "./NavToggle";
 
 const BASE_LINKS = [
-  { href: "/", label: "Week" },
+  { href: "/", label: "Time entry" },
   { href: "/reports", label: "Reports" },
 ];
 
@@ -43,7 +43,7 @@ export function NavBar({
     user?.role === "admin"
       ? [
           { href: "/dashboard", label: "Dashboard" },
-          { href: "/", label: "Week" },
+          { href: "/", label: "Time entry" },
           { href: "/invoices", label: "Invoices" },
           { href: "/reports", label: "Reports" },
           { href: "/team", label: "Team" },
