@@ -39,7 +39,7 @@ afterAll(() => {
 
 describe("runBackup", () => {
   it("creates a readable SQLite snapshot with the current data", async () => {
-    repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+    repo.createUser({ name: "Drew", email: "admin@reposcout.dev", password: "opentime-dev", role: "admin" });
     repo.createUser({ name: "Alice", email: "alice@example.com", password: "password123", role: "member" });
     repo.createUser({ name: "Bob", email: "bob@example.com", password: "password123", role: "member" });
 
@@ -57,7 +57,7 @@ describe("runBackup", () => {
 
   it("overwrites the same-day snapshot file on a second run", async () => {
     const dir = makeTmpDir("overwrite");
-    repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+    repo.createUser({ name: "Drew", email: "admin@reposcout.dev", password: "opentime-dev", role: "admin" });
 
     const first = await runBackup({ dir });
     repo.createUser({ name: "Alice", email: "alice@example.com", password: "password123", role: "member" });
@@ -91,7 +91,7 @@ describe("runBackup", () => {
     }
     fs.writeFileSync(path.join(dir, "not-a-backup.txt"), "ignore me");
 
-    repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+    repo.createUser({ name: "Drew", email: "admin@reposcout.dev", password: "opentime-dev", role: "admin" });
     const result = await runBackup({ dir, keep: 2 });
 
     // 4 fake + 1 real (today) = 5 matching files before prune; keep=2 means
@@ -122,7 +122,7 @@ describe("runBackup", () => {
     expect(latestBackupDate(dir)).toBe("2020-01-04");
 
     // A real run bumps it to today's stamp.
-    repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+    repo.createUser({ name: "Drew", email: "admin@reposcout.dev", password: "opentime-dev", role: "admin" });
     await runBackup({ dir });
     expect(latestBackupDate(dir)).toBe(new Date().toISOString().slice(0, 10));
   });
@@ -132,7 +132,7 @@ describe("runBackup", () => {
     const prevEnv = process.env.OPENTIME_BACKUP_DIR;
     process.env.OPENTIME_BACKUP_DIR = dir;
     try {
-      repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+      repo.createUser({ name: "Drew", email: "admin@reposcout.dev", password: "opentime-dev", role: "admin" });
       const result = await runBackup();
       expect(result.path.startsWith(dir)).toBe(true);
       expect(fs.existsSync(result.path)).toBe(true);

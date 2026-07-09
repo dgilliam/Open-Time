@@ -55,7 +55,7 @@ function main() {
 
   const admin = repo.createUser({
     name: "Drew",
-    email: "drew@gilli.am",
+    email: "admin@reposcout.dev",
     password: "opentime-dev",
     role: "admin",
   });
@@ -215,7 +215,7 @@ function main() {
       `; current week uninvoiced: ${current.totalHours.toFixed(1)}h across ${current.members.length} member(s), next cutoff ${current.nextCutoffAt}.`
   );
 
-  console.log("Admin login: drew@gilli.am / opentime-dev");
+  console.log("Admin login: admin@reposcout.dev / opentime-dev");
   console.log(`Member logins: ${members.map((m) => m.email).join(", ")} / password123`);
 }
 

@@ -52,7 +52,7 @@ let tokenB: string;
 
 beforeEach(() => {
   resetDb();
-  admin = repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+  admin = repo.createUser({ name: "Drew", email: "admin@reposcout.dev", password: "opentime-dev", role: "admin" });
   userA = repo.createUser({ name: "Alice", email: "alice@example.com", password: "password123", role: "member" });
   userB = repo.createUser({ name: "Bob", email: "bob@example.com", password: "password123", role: "member" });
   adminToken = auth.createSession(admin.id).token;

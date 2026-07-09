@@ -555,7 +555,7 @@ or week-nav — but that's unconfirmed as the reported issue.
    (`src/lib/auth.ts`: scrypt hash/verify, session create/lookup/delete,
    cookie helpers), rewrite `src/lib/repo.ts` for tasks/entries/rounding,
    all API routes v2 (delete project routes), seed v2 (admin
-   drew@gilli.am / password `opentime-dev`, 3 members password
+   admin@reposcout.dev / password `opentime-dev`, 3 members password
    `password123`, ~30 tasks in slug format, 10 weeks of entries with
    realistic density incl. empty days), rewrite tests: rounding math,
    task find-or-create + validation + per-user autocomplete scoping,

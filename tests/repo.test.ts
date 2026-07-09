@@ -33,7 +33,7 @@ let userB: ReturnType<typeof repo.createUser>;
 
 beforeEach(() => {
   resetDb();
-  admin = repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+  admin = repo.createUser({ name: "Drew", email: "admin@reposcout.dev", password: "opentime-dev", role: "admin" });
   userA = repo.createUser({ name: "Alice", email: "alice@example.com", password: "password123", role: "member" });
   userB = repo.createUser({ name: "Bob", email: "bob@example.com", password: "password123", role: "member" });
 });
@@ -51,7 +51,7 @@ describe("users", () => {
   it("creates and lists users with roles", () => {
     const users = repo.listUsers();
     expect(users.map((u) => u.name).sort()).toEqual(["Alice", "Bob", "Drew"]);
-    expect(users.find((u) => u.email === "drew@gilli.am")?.role).toBe("admin");
+    expect(users.find((u) => u.email === "admin@reposcout.dev")?.role).toBe("admin");
     expect(users.find((u) => u.email === "alice@example.com")?.role).toBe("member");
   });
 

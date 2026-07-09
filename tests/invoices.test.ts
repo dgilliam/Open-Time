@@ -56,7 +56,7 @@ let member: ReturnType<typeof repo.createUser>;
 
 beforeEach(() => {
   resetDb();
-  admin = repo.createUser({ name: "Drew", email: "drew@gilli.am", password: "opentime-dev", role: "admin" });
+  admin = repo.createUser({ name: "Drew", email: "admin@reposcout.dev", password: "opentime-dev", role: "admin" });
   member = repo.createUser({ name: "Alice", email: "alice@example.com", password: "password123", role: "member" });
 });
 

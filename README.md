@@ -22,7 +22,7 @@ Seeded logins:
 
 | Who | Email | Password |
 |---|---|---|
-| Admin | `drew@gilli.am` | `opentime-dev` |
+| Admin | `admin@reposcout.dev` | `opentime-dev` |
 | Members | `ada@reposcout.dev`, `grace@reposcout.dev`, `alan@reposcout.dev`, `margaret@reposcout.dev`, `katherine@reposcout.dev` | `password123` |
 
 On an empty database (no seed), the app walks you through `/setup` to
