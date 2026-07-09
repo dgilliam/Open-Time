@@ -6,6 +6,13 @@
 // cards, ordered by start time. A running timer (if any) renders as a
 // distinct accent card at the top of TODAY's column, excluded from totals.
 //
+// Cards are deliberately compact (v3.1): one ellipsized line for the task
+// name (full name in the hover tooltip), then just the rounded hours — raw
+// start/stop timestamps live in the edit drawer, not on the card. When the
+// task carries wrap-up metadata, small indicators sit beside the hours:
+// "↗" opens the task link (same affordance as the Reports and Dashboard
+// tables) and "≡" flags details, shown in its tooltip.
+//
 // Card click (outside the task name / status badge / delete affordance)
 // opens the edit drawer via `onEdit`; the task name always opens the wrap-up
 // dialog via `onTaskClick`, even for invoice-locked entries (wrap-up
@@ -33,6 +40,15 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useSession } from "@/components/SessionContext";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Cards show at most ~15 chars of the task name (full name in the tooltip
+// and the edit drawer). The CSS ellipsis on .entry-card-task still guards
+// columns too narrow even for this.
+const TASK_NAME_MAX = 15;
+
+function shortTaskName(name: string) {
+  return name.length > TASK_NAME_MAX + 1 ? `${name.slice(0, TASK_NAME_MAX)}…` : name;
+}
 
 export function WeekGrid({
   weekStart,
@@ -163,7 +179,9 @@ export function WeekGrid({
                   {isToday && running && (
                     <div className="entry-card entry-card-running">
                       <div className="entry-card-line1">
-                        <span className="mono">{running.taskName}</span>
+                        <span className="mono entry-card-task" title={running.taskName}>
+                          {shortTaskName(running.taskName)}
+                        </span>
                       </div>
                       <div className="entry-card-line2">running · started {formatTime(running.startedAt)}</div>
                     </div>
@@ -187,19 +205,20 @@ export function WeekGrid({
                         className={locked ? "entry-card entry-card-locked" : "entry-card"}
                         {...cardProps}
                       >
-                        {/* Row 1: wrapping task name + delete pinned right. The
-                            badge lives on its own row below so it can never
-                            displace the name in these ~110px columns. */}
+                        {/* Row 1: ellipsized task name + delete pinned right.
+                            The badge lives on its own row below so it can
+                            never displace the name in these ~110px columns. */}
                         <div className="entry-card-line1">
                           <button
                             type="button"
                             className="task-name-link mono entry-card-task"
+                            title={entry.taskName}
                             onClick={(e) => {
                               e.stopPropagation();
                               onTaskClick(entry);
                             }}
                           >
-                            {entry.taskName}
+                            {shortTaskName(entry.taskName)}
                           </button>
                           {!locked && (
                             <button
@@ -216,8 +235,33 @@ export function WeekGrid({
                           )}
                         </div>
                         <div className="entry-card-line2">
-                          {formatTime(entry.startedAt)} – {entry.stoppedAt ? formatTime(entry.stoppedAt) : "—"} ·{" "}
                           {entry.durationSecs != null ? hoursLabel(entry.durationSecs) : "—"}
+                          {(entry.taskLink || entry.taskDetails) && (
+                            <span className="entry-card-indicators">
+                              {entry.taskLink && (
+                                <a
+                                  className="task-link-icon"
+                                  href={entry.taskLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label="Task link"
+                                  title={entry.taskLink}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  ↗
+                                </a>
+                              )}
+                              {entry.taskDetails && (
+                                <span
+                                  className="entry-card-details-icon"
+                                  aria-label="Task details"
+                                  title={entry.taskDetails}
+                                >
+                                  ≡
+                                </span>
+                              )}
+                            </span>
+                          )}
                         </div>
                         {entry.taskStatus !== "open" && (
                           <div className="entry-card-line3" onClick={(e) => e.stopPropagation()}>

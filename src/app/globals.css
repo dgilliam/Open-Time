@@ -1508,6 +1508,7 @@ th.num.sortable button {
 }
 
 .entry-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -1536,15 +1537,15 @@ th.num.sortable button {
   min-width: 0;
 }
 
-/* Task names are the card's payload: wrap them (slugs have no spaces, so
-   allow breaking anywhere) instead of ellipsizing to nothing in the narrow
-   week columns. */
-.entry-card-line1 .task-name-link {
+/* Task names ellipsize to one line (~15 chars at the default column width);
+   the full name lives in the title tooltip and the edit drawer. Applies to
+   both the clickable name and the running card's plain span. */
+.entry-card-task {
   flex: 1;
   min-width: 0;
-  white-space: normal;
-  word-break: break-all;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: left;
   font-size: 0.78rem;
   line-height: 1.35;
@@ -1555,17 +1556,56 @@ th.num.sortable button {
 }
 
 .entry-card-line2 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.75rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
-.entry-card-delete {
-  flex-shrink: 0;
+/* Wrap-up indicators pinned to the right of the hours: link (↗, opens it)
+   and details (≡, tooltip shows the text). */
+.entry-card-indicators {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.entry-card-indicators .task-link-icon {
+  margin-left: 0;
+}
+
+.entry-card-details-icon {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Delete is hover-revealed and overlaid in the corner so the task name gets
+   the card's full width (~15 chars at the default column width). Kept
+   always-visible where hover doesn't exist (touch), since the edit drawer
+   offers no delete. */
+.entry-card-delete {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
   width: 22px;
   height: 22px;
   font-size: 1rem;
+  background: var(--background);
+  opacity: 0;
+}
+
+.entry-card:hover .entry-card-delete,
+.entry-card-delete:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .entry-card-delete {
+    opacity: 1;
+  }
 }
 
 /* Running-timer card: distinct accent treatment, never clickable for edit
