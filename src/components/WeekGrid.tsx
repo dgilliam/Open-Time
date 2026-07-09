@@ -7,11 +7,12 @@
 // distinct accent card at the top of TODAY's column, excluded from totals.
 //
 // Cards are deliberately compact (v3.1): one ellipsized line for the task
-// name (full name in the hover tooltip), then just the rounded hours — raw
-// start/stop timestamps live in the edit drawer, not on the card. When the
-// task carries wrap-up metadata, small indicators sit beside the hours:
-// "↗" opens the task link (same affordance as the Reports and Dashboard
-// tables) and "≡" flags details, shown in its tooltip.
+// name, then just the rounded hours — raw start/stop timestamps live in the
+// edit drawer, not on the card. When the task carries wrap-up metadata,
+// small indicators sit beside the hours: "↗" opens the task link (same
+// affordance as the Reports and Dashboard tables) and "≡" flags details.
+// Everything the compact face hides (full name, start–stop, status, link,
+// details) is in the card's native hover tooltip via `cardTitle`.
 //
 // Card click (outside the task name / status badge / delete affordance)
 // opens the edit drawer via `onEdit`; the task name always opens the wrap-up
@@ -48,6 +49,28 @@ const TASK_NAME_MAX = 15;
 
 function shortTaskName(name: string) {
   return name.length > TASK_NAME_MAX + 1 ? `${name.slice(0, TASK_NAME_MAX)}…` : name;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  open: "Open",
+  draft: "Draft",
+  submitted: "Submitted",
+  accepted: "Accepted",
+  dead_end: "Dead end",
+};
+
+/** Native-tooltip summary of everything the compact card hides. */
+function cardTitle(entry: TimeEntry): string {
+  const lines = [
+    entry.taskName,
+    `${formatTime(entry.startedAt)} – ${entry.stoppedAt ? formatTime(entry.stoppedAt) : "—"} · ${
+      entry.durationSecs != null ? hoursLabel(entry.durationSecs) : "—"
+    }`,
+    `Status: ${STATUS_LABELS[entry.taskStatus] ?? entry.taskStatus}`,
+  ];
+  if (entry.taskLink) lines.push(`Link: ${entry.taskLink}`);
+  if (entry.taskDetails) lines.push(entry.taskDetails);
+  return lines.join("\n");
 }
 
 export function WeekGrid({
@@ -203,6 +226,7 @@ export function WeekGrid({
                       <div
                         key={entry.id}
                         className={locked ? "entry-card entry-card-locked" : "entry-card"}
+                        title={cardTitle(entry)}
                         {...cardProps}
                       >
                         {/* Row 1: ellipsized task name + delete pinned right.
@@ -212,7 +236,6 @@ export function WeekGrid({
                           <button
                             type="button"
                             className="task-name-link mono entry-card-task"
-                            title={entry.taskName}
                             onClick={(e) => {
                               e.stopPropagation();
                               onTaskClick(entry);

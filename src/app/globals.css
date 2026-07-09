@@ -1553,6 +1553,20 @@ th.num.sortable button {
 
 .entry-card-line3 {
   margin-top: 0.3rem;
+  min-width: 0;
+}
+
+/* Inside the narrow week cards the badge shrinks to fit: smaller type and
+   padding than the table-context badge, and it ellipsizes instead of
+   overflowing the card when the column gets tight. */
+.entry-card-line3 .status-badge {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .entry-card-line2 {
