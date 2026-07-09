@@ -1,11 +1,13 @@
 "use client";
 
-// v3.0 week page: TimerBar unchanged at top; below it, a Week | Month toggle
-// (T28). Week mode = WeekGrid (T27). Month mode reuses MonthCalendar +
-// Heatmap exactly as the retired /calendar page did, self-only (no admin
-// person-selector here — that stays out of scope per the plan). Toggle state
-// is plain useState, not persisted to localStorage: it's a cheap default and
-// nothing in feedback asked for cross-visit persistence.
+// v3.0 week page: TimerBar unchanged at top; below it, a Week | Timesheet |
+// Month toggle. Week mode = WeekGrid (T27). Timesheet mode (v3.1) revives
+// the retired /timesheet grid as a component sharing this page's week state
+// and entry data. Month mode reuses MonthCalendar + Heatmap exactly as the
+// retired /calendar page did, self-only (no admin person-selector here —
+// that stays out of scope per the plan). Toggle state is plain useState, not
+// persisted to localStorage: it's a cheap default and nothing in feedback
+// asked for cross-visit persistence.
 // AppShell guarantees a signed-in user by the time this renders.
 
 import { useCallback, useEffect, useState } from "react";
@@ -25,9 +27,10 @@ import { Heatmap } from "@/components/Heatmap";
 import { MonthCalendar } from "@/components/MonthCalendar";
 import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { TimerBar } from "@/components/TimerBar";
+import { TimesheetGrid } from "@/components/TimesheetGrid";
 import { WeekGrid } from "@/components/WeekGrid";
 
-type Mode = "week" | "month";
+type Mode = "week" | "timesheet" | "month";
 
 function endOfMonthIso(month: Date): string {
   const nextMonth = new Date(month.getFullYear(), month.getMonth() + 1, 1);
@@ -180,13 +183,20 @@ export default function Home() {
         </button>
         <button
           type="button"
+          className={mode === "timesheet" ? "btn btn-preset active" : "btn btn-preset"}
+          onClick={() => setMode("timesheet")}
+        >
+          Timesheet
+        </button>
+        <button
+          type="button"
           className={mode === "month" ? "btn btn-preset active" : "btn btn-preset"}
           onClick={() => setMode("month")}
         >
           Month
         </button>
       </div>
-      {mode === "week" ? (
+      {mode === "week" && (
         <WeekGrid
           weekStart={weekStart}
           onWeekStartChange={setWeekStart}
@@ -198,7 +208,17 @@ export default function Home() {
           onStatusSaved={() => loadWeek(weekStart)}
           onDelete={handleDelete}
         />
-      ) : (
+      )}
+      {mode === "timesheet" && (
+        <TimesheetGrid
+          weekStart={weekStart}
+          onWeekStartChange={setWeekStart}
+          entries={weekEntries}
+          onTaskClick={(entry) => setWrapUp(entry)}
+          onChanged={() => loadWeek(weekStart)}
+        />
+      )}
+      {mode === "month" && (
         <>
           <MonthCalendar
             month={month}
