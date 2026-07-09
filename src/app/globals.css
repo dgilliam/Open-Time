@@ -1417,6 +1417,198 @@ th.num.sortable button {
   background: var(--background);
 }
 
+/* ---------- week grid (v3.0 week mode) ---------- */
+
+.week-grid-section {
+  min-width: 0;
+}
+
+/* Wide-grid scroll safety (v2.3 lesson): between the desktop grid and the
+   640px stack breakpoint, hold a sane per-column minimum and let the grid
+   scroll inside its own container rather than squeezing cards illegibly or
+   overflowing the page. */
+.week-grid-scroll {
+  overflow-x: auto;
+}
+
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+@media (min-width: 641px) and (max-width: 899px) {
+  .week-grid {
+    min-width: 760px;
+  }
+}
+
+.week-day {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.week-day-today {
+  border-color: var(--accent);
+}
+
+.week-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.week-day-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.week-day-date {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.week-day-today .week-day-date {
+  color: var(--foreground);
+}
+
+.week-day-total {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.week-day-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.week-day-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  text-align: left;
+  cursor: pointer;
+}
+
+.entry-card:hover {
+  border-color: var(--accent);
+}
+
+.entry-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.entry-card-line1 {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+/* Task names are the card's payload: wrap them (slugs have no spaces, so
+   allow breaking anywhere) instead of ellipsizing to nothing in the narrow
+   week columns. */
+.entry-card-line1 .task-name-link {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.entry-card-line3 {
+  margin-top: 0.3rem;
+}
+
+.entry-card-line2 {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-card-delete {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  font-size: 1rem;
+}
+
+/* Running-timer card: distinct accent treatment, never clickable for edit
+   (excluded from the entries list/onClick wiring entirely), excluded from
+   day/week totals since durationSecs is null while running. */
+.entry-card-running {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  cursor: default;
+}
+
+.entry-card-running:hover {
+  border-color: var(--accent);
+}
+
+/* Invoice-locked entry (member viewer only — admins see normal cards):
+   greyed, no edit-drawer click target, no delete affordance. The task name
+   button stays enabled (wrap-up metadata isn't invoice data), matching
+   EntryList's existing rule. */
+.entry-card-locked {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.entry-card-locked:hover {
+  border-color: var(--border);
+}
+
+@media (max-width: 640px) {
+  /* Columns stack vertically as day sections; today is reordered to the
+     top via the CSS `order` property (--day-order is set inline per column,
+     -1 for today, the column's index otherwise) rather than a scroll-to. */
+  .week-grid {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .week-day {
+    order: var(--day-order, 0);
+  }
+}
+
 /* ---------- invoice locking: member-side greying (v2.8) ---------- */
 
 /* Muted row for a locked-invoiced entry on a member's own surfaces (Timer

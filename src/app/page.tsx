@@ -1,18 +1,18 @@
 "use client";
 
-// Timer + day navigator: task combobox / Start-Stop hero, plus the viewed
-// day's completed entries with edit/delete/add and the task wrap-up dialog
-// (v2.6). AppShell guarantees a signed-in user by the time this renders.
+// v3.0 week page: TimerBar unchanged at top; below it, a Sun-first week grid
+// (WeekGrid) replaces the old day-navigator + EntryList section. Month mode,
+// the /timesheet and /calendar retirements, redirects, and nav copy are T28.
+// AppShell guarantees a signed-in user by the time this renders.
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, deleteEntry, getRunningEntry, listEntries, startTimer, stopTimer } from "@/lib/api";
-import { addDays, pluralCount, startOfDay, toIso } from "@/lib/format";
+import { addDays, startOfWeekSun, toIso } from "@/lib/format";
 import type { TimeEntry } from "@/lib/types";
-import { DayNav } from "@/components/DayNav";
 import { EntryDialog } from "@/components/EntryDialog";
-import { EntryList } from "@/components/EntryList";
 import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { TimerBar } from "@/components/TimerBar";
+import { WeekGrid } from "@/components/WeekGrid";
 
 /** Local 09:00 / 09:30 of `day`, formatted for the <input type="datetime-local"> defaults. */
 function defaultAddTimeRange(day: Date): { startedAt: string; stoppedAt: string } {
@@ -26,41 +26,42 @@ function defaultAddTimeRange(day: Date): { startedAt: string; stoppedAt: string 
 export default function Home() {
   const [running, setRunning] = useState<TimeEntry | null>(null);
   const [taskInput, setTaskInput] = useState("");
-  const [day, setDay] = useState<Date>(() => startOfDay(new Date()));
-  const [dayEntries, setDayEntries] = useState<TimeEntry[]>([]);
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekSun(new Date()));
+  const [weekEntries, setWeekEntries] = useState<TimeEntry[]>([]);
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<TimeEntry | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [addingDay, setAddingDay] = useState<Date | null>(null);
   const [wrapUp, setWrapUp] = useState<TimeEntry | null>(null);
   const [ready, setReady] = useState(false);
 
-  const loadDay = useCallback(async (viewedDay: Date) => {
-    const from = toIso(startOfDay(viewedDay));
-    const to = toIso(addDays(startOfDay(viewedDay), 1));
+  const loadWeek = useCallback(async (viewedWeekStart: Date) => {
+    const from = toIso(viewedWeekStart);
+    const rangeEnd = addDays(viewedWeekStart, 6);
+    const to = toIso(new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59, 999));
     const entries = await listEntries({ from, to });
-    setDayEntries(entries.filter((e) => e.stoppedAt !== null));
+    setWeekEntries(entries.filter((e) => e.stoppedAt !== null));
   }, []);
 
   useEffect(() => {
     (async () => {
       try {
-        const [runningEntry] = await Promise.all([getRunningEntry(), loadDay(day)]);
+        const [runningEntry] = await Promise.all([getRunningEntry(), loadWeek(weekStart)]);
         setRunning(runningEntry);
       } finally {
         setReady(true);
       }
     })();
-    // Only run once on mount for the running-timer fetch; day changes are
+    // Only run once on mount for the running-timer fetch; week changes are
     // handled by the effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!ready) return;
-    loadDay(day);
-  }, [day, ready, loadDay]);
+    loadWeek(weekStart);
+  }, [weekStart, ready, loadWeek]);
 
   async function handleStart() {
     setError(null);
@@ -69,7 +70,7 @@ export default function Home() {
       const entry = await startTimer({ task: taskInput });
       setRunning(entry);
       setTaskInput("");
-      await loadDay(day);
+      await loadWeek(weekStart);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "failed to start timer");
     } finally {
@@ -83,7 +84,7 @@ export default function Home() {
     try {
       const stopped = await stopTimer();
       setRunning(null);
-      await loadDay(day);
+      await loadWeek(weekStart);
       // Stopping is never blocked on the wrap-up dialog — the idle UI above
       // is already committed by the time this opens.
       setWrapUp(stopped);
@@ -96,14 +97,14 @@ export default function Home() {
 
   async function handleDelete(id: string) {
     await deleteEntry(id);
-    await loadDay(day);
+    await loadWeek(weekStart);
   }
 
   if (!ready) return null;
 
   return (
     <div className="page">
-      <h1>Timer</h1>
+      <h1>Week</h1>
       <TimerBar
         running={running}
         taskInput={taskInput}
@@ -114,41 +115,34 @@ export default function Home() {
         stopping={stopping}
         error={error}
       />
-      <section className="section">
-        <h2>
-          Entries <span className="table-count">{pluralCount(dayEntries.length, "entry", "entries")}</span>
-        </h2>
-        <div className="toolbar">
-          <DayNav day={day} onChange={setDay} />
-          <button type="button" className="btn" onClick={() => setAdding(true)}>
-            + Add time
-          </button>
-        </div>
-        <EntryList
-          entries={dayEntries}
-          onEdit={setEditing}
-          onDelete={handleDelete}
-          onTaskClick={(entry) => setWrapUp(entry)}
-          onStatusSaved={() => loadDay(day)}
-        />
-      </section>
+      <WeekGrid
+        weekStart={weekStart}
+        onWeekStartChange={setWeekStart}
+        entries={weekEntries}
+        running={running}
+        onAdd={(day) => setAddingDay(day)}
+        onEdit={setEditing}
+        onTaskClick={(entry) => setWrapUp(entry)}
+        onStatusSaved={() => loadWeek(weekStart)}
+        onDelete={handleDelete}
+      />
       {editing && (
         <EntryDialog
           entry={editing}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            loadDay(day);
+            loadWeek(weekStart);
           }}
         />
       )}
-      {adding && (
+      {addingDay && (
         <EntryDialog
-          createDefaults={defaultAddTimeRange(day)}
-          onClose={() => setAdding(false)}
+          createDefaults={defaultAddTimeRange(addingDay)}
+          onClose={() => setAddingDay(null)}
           onSaved={() => {
-            setAdding(false);
-            loadDay(day);
+            setAddingDay(null);
+            loadWeek(weekStart);
           }}
         />
       )}
@@ -162,7 +156,7 @@ export default function Home() {
           onClose={() => setWrapUp(null)}
           onSaved={() => {
             setWrapUp(null);
-            loadDay(day);
+            loadWeek(weekStart);
           }}
         />
       )}
