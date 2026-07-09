@@ -23,6 +23,16 @@ Rules of engagement:
 - The orchestrator reviews every executor result (diff + build/test output)
   before committing.
 
+## Release discipline (founder policy, 2026-07-09)
+
+`main` auto-deploys to production (Railway). Therefore:
+- **Significant changes** (redesigns, new pages, schema changes, anything
+  touching invoicing/auth) stay on a feature branch until the founder has
+  tested them on localhost and explicitly says "merge".
+- **Small fixes and copy tweaks** may merge to main directly after the
+  usual review + test gate.
+- When in doubt, it's significant — wait for the founder.
+
 ## Commands
 
 - `npm run dev` — dev server on :3000
