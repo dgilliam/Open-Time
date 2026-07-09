@@ -1,18 +1,38 @@
 "use client";
 
-// v3.0 week page: TimerBar unchanged at top; below it, a Sun-first week grid
-// (WeekGrid) replaces the old day-navigator + EntryList section. Month mode,
-// the /timesheet and /calendar retirements, redirects, and nav copy are T28.
+// v3.0 week page: TimerBar unchanged at top; below it, a Week | Month toggle
+// (T28). Week mode = WeekGrid (T27). Month mode reuses MonthCalendar +
+// Heatmap exactly as the retired /calendar page did, self-only (no admin
+// person-selector here — that stays out of scope per the plan). Toggle state
+// is plain useState, not persisted to localStorage: it's a cheap default and
+// nothing in feedback asked for cross-visit persistence.
 // AppShell guarantees a signed-in user by the time this renders.
 
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, deleteEntry, getRunningEntry, listEntries, startTimer, stopTimer } from "@/lib/api";
-import { addDays, startOfWeekSun, toIso } from "@/lib/format";
-import type { TimeEntry } from "@/lib/types";
+import {
+  ApiError,
+  deleteEntry,
+  getCalendar,
+  getRunningEntry,
+  listEntries,
+  startTimer,
+  stopTimer,
+} from "@/lib/api";
+import { addDays, dateInputValue, startOfDay, startOfMonth, startOfWeek, startOfWeekSun, toIso } from "@/lib/format";
+import type { CalendarDay, TimeEntry } from "@/lib/types";
 import { EntryDialog } from "@/components/EntryDialog";
+import { Heatmap } from "@/components/Heatmap";
+import { MonthCalendar } from "@/components/MonthCalendar";
 import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { TimerBar } from "@/components/TimerBar";
 import { WeekGrid } from "@/components/WeekGrid";
+
+type Mode = "week" | "month";
+
+function endOfMonthIso(month: Date): string {
+  const nextMonth = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+  return toIso(new Date(nextMonth.getTime() - 1));
+}
 
 /** Local 09:00 / 09:30 of `day`, formatted for the <input type="datetime-local"> defaults. */
 function defaultAddTimeRange(day: Date): { startedAt: string; stoppedAt: string } {
@@ -35,6 +55,11 @@ export default function Home() {
   const [addingDay, setAddingDay] = useState<Date | null>(null);
   const [wrapUp, setWrapUp] = useState<TimeEntry | null>(null);
   const [ready, setReady] = useState(false);
+  const [mode, setMode] = useState<Mode>("week");
+  const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()));
+  const [monthData, setMonthData] = useState<CalendarDay[]>([]);
+  const [heatmapDays, setHeatmapDays] = useState<{ date: Date; hours: number }[]>([]);
+  const [heatmapReady, setHeatmapReady] = useState(false);
 
   const loadWeek = useCallback(async (viewedWeekStart: Date) => {
     const from = toIso(viewedWeekStart);
@@ -62,6 +87,36 @@ export default function Home() {
     if (!ready) return;
     loadWeek(weekStart);
   }, [weekStart, ready, loadWeek]);
+
+  // Month mode: month grid data, refetched on month navigation. userId
+  // omitted — the API defaults to the caller's own id (self-only, matching
+  // the retired /calendar page's member behavior with no person-selector).
+  useEffect(() => {
+    if (!ready || mode !== "month") return;
+    getCalendar({ from: toIso(startOfMonth(month)), to: endOfMonthIso(month) })
+      .then(setMonthData)
+      .catch(() => setMonthData([]));
+  }, [ready, mode, month]);
+
+  // Month mode: heatmap covers the last ~12 months, fetched once on first
+  // entry into month mode (not on month navigation).
+  useEffect(() => {
+    if (!ready || mode !== "month" || heatmapReady) return;
+    const today = startOfDay(new Date());
+    const rangeEnd = addDays(startOfWeek(today), 6);
+    const rangeStart = startOfWeek(new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() + 1));
+    getCalendar({ from: toIso(rangeStart), to: toIso(rangeEnd) })
+      .then((data) => {
+        const byDate = new Map(data.map((d) => [d.date, d.hours]));
+        const days: { date: Date; hours: number }[] = [];
+        for (let d = rangeStart; d <= rangeEnd; d = addDays(d, 1)) {
+          days.push({ date: d, hours: byDate.get(dateInputValue(d)) ?? 0 });
+        }
+        setHeatmapDays(days);
+      })
+      .catch(() => setHeatmapDays([]))
+      .finally(() => setHeatmapReady(true));
+  }, [ready, mode, heatmapReady]);
 
   async function handleStart() {
     setError(null);
@@ -115,17 +170,49 @@ export default function Home() {
         stopping={stopping}
         error={error}
       />
-      <WeekGrid
-        weekStart={weekStart}
-        onWeekStartChange={setWeekStart}
-        entries={weekEntries}
-        running={running}
-        onAdd={(day) => setAddingDay(day)}
-        onEdit={setEditing}
-        onTaskClick={(entry) => setWrapUp(entry)}
-        onStatusSaved={() => loadWeek(weekStart)}
-        onDelete={handleDelete}
-      />
+      <div className="preset-group">
+        <button
+          type="button"
+          className={mode === "week" ? "btn btn-preset active" : "btn btn-preset"}
+          onClick={() => setMode("week")}
+        >
+          Week
+        </button>
+        <button
+          type="button"
+          className={mode === "month" ? "btn btn-preset active" : "btn btn-preset"}
+          onClick={() => setMode("month")}
+        >
+          Month
+        </button>
+      </div>
+      {mode === "week" ? (
+        <WeekGrid
+          weekStart={weekStart}
+          onWeekStartChange={setWeekStart}
+          entries={weekEntries}
+          running={running}
+          onAdd={(day) => setAddingDay(day)}
+          onEdit={setEditing}
+          onTaskClick={(entry) => setWrapUp(entry)}
+          onStatusSaved={() => loadWeek(weekStart)}
+          onDelete={handleDelete}
+        />
+      ) : (
+        <>
+          <MonthCalendar
+            month={month}
+            data={monthData}
+            onPrev={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+            onNext={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+            onToday={() => setMonth(startOfMonth(new Date()))}
+          />
+          <section className="section">
+            <h2>Activity</h2>
+            {heatmapReady && <Heatmap days={heatmapDays} />}
+          </section>
+        </>
+      )}
       {editing && (
         <EntryDialog
           entry={editing}

@@ -7,8 +7,9 @@ tasks-within-tasks, or billable rates. A task is a string like
 `GM7VKNDN9Y3F-otp-resend-onboarding` (slug, dash, kebab description) or
 free text like `Internal Meeting`; entries attach to tasks, and durations
 round to the nearest half hour when saved. The individual contributor's
-entire surface is the Timer page: type or pick a task, hit Start. See
-`docs/PLAN.md` for the full rationale and API contract.
+entire surface is one Week page: type or pick a task, hit Start, and see
+the week's entries as cards below. See `docs/PLAN.md` for the full
+rationale and API contract.
 
 ## Quickstart
 
@@ -38,12 +39,19 @@ there is no self-registration.
 
 ## Pages
 
-- **Timer** — task autocomplete (your previously used tasks), start/stop,
-  today's entries.
-- **Calendar** — month grid with rounded hours per day, plus a
-  GitHub-style 12-month activity heatmap.
+- **Week** (`/`) — task autocomplete (your previously used tasks),
+  start/stop timer, then a Week | Month toggle. Week mode: seven Sun-first
+  day columns with that day's completed entries as cards (task, start–stop,
+  duration, status badge), a `+` per column to backfill time, and a live
+  card for a running timer. Month mode: month grid with rounded hours per
+  day, plus a GitHub-style 12-month activity heatmap. Both modes are
+  self-only. `/timesheet` and `/calendar` redirect here.
 - **Reports** — hours by task over a date range; admin can view any
   member or group by user.
+- **Dashboard** (admin) — team-wide stats, per-contributor and per-task
+  tables, and an entries table for correcting anyone's time.
+- **Invoices** (admin) — weekly invoice periods swept from completed time,
+  lock/unlock, and per-period CSV export.
 - **Team** (admin) — member list + add member. Admin can assign each member
   an optional project label (edit action per row); the project shows up in
   the admin dashboard and reports tables and in CSV exports, but is

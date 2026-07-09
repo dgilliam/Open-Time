@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 export const metadata: Metadata = {
   title: {
     template: "Open-Time — %s",
-    default: "Open-Time — Timer", // the root page is the Timer
+    default: "Open-Time — Week", // the root page is the Week view
   },
   description: "Team time tracking for RepoScout",
 };

@@ -1,9 +1,9 @@
 "use client";
 
-// Session-aware nav: Timer/Timesheet/Calendar/Reports for everyone, Dashboard
-// + Team for admins only, and a sign-out control at the bottom. Rendered only
-// once AppShell has confirmed a user is signed in, so `user` here is never
-// null in practice — the fallback guards keep this component safe to reuse
+// Session-aware nav: Week/Reports for everyone, Dashboard/Invoices/Team for
+// admins only, and a sign-out control at the bottom. Rendered only once
+// AppShell has confirmed a user is signed in, so `user` here is never null
+// in practice — the fallback guards keep this component safe to reuse
 // anywhere.
 //
 // v2.3: this is now reused as both the desktop sidebar and the mobile
@@ -11,6 +11,9 @@
 // the same <nav>). `collapsed`/`onToggleCollapse` drive the desktop-only
 // collapse chevron at the top; `open` just adds the class the drawer's CSS
 // transform keys off of.
+//
+// v3.0: Timer/Timesheet/Calendar merged into the single Week page at "/";
+// those three nav entries collapse to one "Week" entry.
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -19,9 +22,7 @@ import { useSession } from "./SessionContext";
 import { NavToggle } from "./NavToggle";
 
 const BASE_LINKS = [
-  { href: "/", label: "Timer" },
-  { href: "/timesheet", label: "Timesheet" },
-  { href: "/calendar", label: "Calendar" },
+  { href: "/", label: "Week" },
   { href: "/reports", label: "Reports" },
 ];
 
@@ -42,8 +43,9 @@ export function NavBar({
     user?.role === "admin"
       ? [
           { href: "/dashboard", label: "Dashboard" },
+          { href: "/", label: "Week" },
           { href: "/invoices", label: "Invoices" },
-          ...BASE_LINKS,
+          { href: "/reports", label: "Reports" },
           { href: "/team", label: "Team" },
         ]
       : BASE_LINKS;
