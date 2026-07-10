@@ -3,11 +3,22 @@ import fs from "node:fs";
 import path from "node:path";
 
 const DEFAULT_DB_PATH = path.join(process.cwd(), "data", "opentime.db");
-const dbPath = process.env.OPENTIME_DB || DEFAULT_DB_PATH;
 
-const dir = path.dirname(dbPath);
-if (dir !== ":memory:" && !fs.existsSync(dir)) {
-  fs.mkdirSync(dir, { recursive: true });
+// `next build` imports this module from several parallel page-data-collection
+// workers purely as a side effect — every page is a client shell and every
+// API route is force-dynamic, so the build never reads real data. Those
+// workers racing the schema DDL (and, once the build outgrew the schedulers'
+// 30s/60s fuses below, an invoice sweep mid-DDL) is what broke the Railway
+// deploy with SQLITE_BUSY. Builds therefore get an isolated in-memory DB and
+// no schedulers; only the real runtime touches the database file.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+const dbPath = isBuildPhase ? ":memory:" : process.env.OPENTIME_DB || DEFAULT_DB_PATH;
+
+if (!isBuildPhase) {
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 }
 
 export const db = new Database(dbPath);
@@ -157,6 +168,7 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_time_entries_invoice_period ON time_entr
 // time.
 const BACKUP_FLAG = "__opentimeBackupScheduled";
 if (
+  !isBuildPhase &&
   process.env.NODE_ENV === "production" &&
   process.env.OPENTIME_BACKUPS !== "0" &&
   !(globalThis as Record<string, unknown>)[BACKUP_FLAG]
@@ -185,6 +197,7 @@ if (
 // to how ./backup is loaded above.
 const INVOICES_FLAG = "__opentimeInvoicesScheduled";
 if (
+  !isBuildPhase &&
   process.env.NODE_ENV === "production" &&
   process.env.OPENTIME_INVOICES !== "0" &&
   !(globalThis as Record<string, unknown>)[INVOICES_FLAG]
