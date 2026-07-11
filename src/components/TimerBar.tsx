@@ -1,7 +1,11 @@
 "use client";
 
 // The Timer page's hero: idle state is a task combobox + Start button;
-// running state is a big ticking elapsed readout, the task name, and Stop.
+// running state is a big ticking readout, the task name, and Stop. The
+// readout continues from the task's recorded total (taskRecordedSecs,
+// v3.2.1) so resuming a multi-session task doesn't restart at 0:00:00; the
+// current session's own elapsed time is shown in the subtitle when a
+// recorded total is included.
 
 import { useEffect, useState } from "react";
 import { formatHms } from "@/lib/format";
@@ -41,13 +45,16 @@ export function TimerBar({
   }, [running]);
 
   if (running) {
+    const recorded = running.taskRecordedSecs ?? 0;
     return (
       <div className="timer-bar">
         <div className="timer-running">
-          <div className="timer-elapsed">{formatHms(elapsed)}</div>
+          <div className="timer-elapsed">{formatHms(recorded + elapsed)}</div>
           <div className="timer-info">
             <div className="timer-project mono">{running.taskName}</div>
-            <div className="timer-note">Running…</div>
+            <div className="timer-note">
+              {recorded > 0 ? `Running… · this session ${formatHms(elapsed)}` : "Running…"}
+            </div>
           </div>
           <button type="button" className="btn-danger" onClick={onStop} disabled={stopping}>
             {stopping ? "Stopping…" : "Stop"}

@@ -50,6 +50,11 @@ export interface TimeEntry {
   // member-facing UIs can grey/hide edit affordances without an extra call.
   invoicePeriodId: string | null;
   invoiceLocked: boolean;
+  // Populated only by the timer endpoints (GET /api/timer and POST
+  // /api/timer/start; v3.2.1): the user's total rounded seconds already
+  // recorded against this entry's task, so the running readout can continue
+  // a resumed task from its recorded total instead of restarting at 0:00:00.
+  taskRecordedSecs?: number;
 }
 
 // ---------- invoice periods (v2.8) ----------

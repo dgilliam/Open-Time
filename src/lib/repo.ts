@@ -570,6 +570,23 @@ export function startTimer(input: { userId: string; task: string }): TimeEntry {
   return getEntry(id)!;
 }
 
+/**
+ * Total rounded seconds this user has already recorded against a task
+ * (completed entries only). Served with the timer endpoints (v3.2.1) so a
+ * resumed task's headline timer continues from its recorded total instead of
+ * restarting at 0:00:00.
+ */
+export function taskRecordedSecs(userId: string, taskId: string): number {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(duration_secs), 0) as total
+       FROM time_entries
+       WHERE user_id = ? AND task_id = ? AND stopped_at IS NOT NULL`
+    )
+    .get(userId, taskId) as { total: number };
+  return row.total;
+}
+
 export function stopTimer(input: { userId: string }): TimeEntry {
   if (!input.userId) throw new ApiError(400, "userId is required");
   const running = getRunningEntry(input.userId);

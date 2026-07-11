@@ -741,6 +741,40 @@ describe("timer", () => {
   it("409s when stopping with nothing running", () => {
     expectApiError(() => repo.stopTimer({ userId: userA.id }), 409);
   });
+
+  it("taskRecordedSecs sums the user's completed entries for a task only (v3.2.1)", () => {
+    const entry = repo.createEntry({
+      userId: userA.id,
+      task: "ab17-recorded",
+      startedAt: "2026-07-06T09:00:00.000Z",
+      stoppedAt: "2026-07-06T10:30:00.000Z",
+    });
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab17-recorded",
+      startedAt: "2026-07-07T09:00:00.000Z",
+      stoppedAt: "2026-07-07T10:00:00.000Z",
+    });
+    // Other task and other user must not count.
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab18-other-task",
+      startedAt: "2026-07-06T09:00:00.000Z",
+      stoppedAt: "2026-07-06T12:00:00.000Z",
+    });
+    repo.createEntry({
+      userId: userB.id,
+      task: "ab17-recorded",
+      startedAt: "2026-07-06T09:00:00.000Z",
+      stoppedAt: "2026-07-06T11:00:00.000Z",
+    });
+
+    expect(repo.taskRecordedSecs(userA.id, entry.taskId)).toBe((1.5 + 1) * 3600);
+
+    // A running entry adds nothing until stopped.
+    repo.startTimer({ userId: userA.id, task: "ab17-recorded" });
+    expect(repo.taskRecordedSecs(userA.id, entry.taskId)).toBe((1.5 + 1) * 3600);
+  });
 });
 
 describe("entries listing with date filters", () => {
