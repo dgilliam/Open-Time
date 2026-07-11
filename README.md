@@ -45,6 +45,8 @@ there is no self-registration.
   cards (task, rounded hours, status badge, wrap-up indicators), a `+` per
   column to backfill time, and a live card for a running timer. Timesheet
   mode: one row per task with editable hours per day, plus `+ Add row`.
+  Cards and timesheet rows carry a hover `▶` ("start again") that resumes
+  that task — swapping out a running timer silently if there is one.
   Month mode: month grid with rounded hours per day, plus a GitHub-style
   12-month activity heatmap. All modes are self-only. `/timesheet` and
   `/calendar` redirect here.

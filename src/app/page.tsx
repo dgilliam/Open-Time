@@ -158,6 +158,30 @@ export default function Home() {
     await loadWeek(weekStart);
   }
 
+  // "Start again" (v3.2, team feedback): one click on an entry card or
+  // timesheet row resumes its task. Swap UX: a running timer is stopped
+  // silently first — no wrap-up dialog, since the point of the button is
+  // switching tasks without ceremony (the stopped entry can be groomed from
+  // its card later). Clicking the already-running task is a no-op.
+  const [swapping, setSwapping] = useState(false);
+  async function handleStartAgain(taskName: string) {
+    if (swapping) return;
+    if (running && running.taskName === taskName) return;
+    setError(null);
+    setSwapping(true);
+    try {
+      if (running) await stopTimer();
+      const entry = await startTimer({ task: taskName });
+      setRunning(entry);
+      await loadWeek(weekStart);
+    } catch (err) {
+      setRunning(await getRunningEntry().catch(() => null));
+      setError(err instanceof ApiError ? err.message : "failed to restart task");
+    } finally {
+      setSwapping(false);
+    }
+  }
+
   if (!ready) return null;
 
   return (
@@ -207,6 +231,7 @@ export default function Home() {
           onTaskClick={(entry) => setWrapUp(entry)}
           onStatusSaved={() => loadWeek(weekStart)}
           onDelete={handleDelete}
+          onStartAgain={handleStartAgain}
         />
       )}
       {mode === "timesheet" && (
@@ -216,6 +241,7 @@ export default function Home() {
           entries={weekEntries}
           onTaskClick={(entry) => setWrapUp(entry)}
           onChanged={() => loadWeek(weekStart)}
+          onStartAgain={handleStartAgain}
         />
       )}
       {mode === "month" && (

@@ -84,6 +84,7 @@ export function TimesheetGrid({
   entries,
   onTaskClick,
   onChanged,
+  onStartAgain,
 }: {
   /** Sunday (local midnight) of the viewed week. */
   weekStart: Date;
@@ -94,6 +95,8 @@ export function TimesheetGrid({
   onTaskClick: (entry: TimeEntry) => void;
   /** Refetch callback after a cell save. */
   onChanged: () => Promise<void> | void;
+  /** "Start again" (v3.2): start/swap the timer onto this row's task. */
+  onStartAgain: (taskName: string) => void;
 }) {
   const { user } = useSession();
   const isAdmin = user?.role === "admin";
@@ -248,7 +251,16 @@ export function TimesheetGrid({
             )}
             {rows.map((row) => (
               <tr key={row.key}>
-                <td className="mono">
+                <td className="mono timesheet-task-cell">
+                  <button
+                    type="button"
+                    className="btn-icon timesheet-restart"
+                    aria-label={`Start timer for ${row.displayName}`}
+                    title="Start again"
+                    onClick={() => onStartAgain(row.displayName)}
+                  >
+                    ▶
+                  </button>
                   {row.refEntry ? (
                     <button type="button" className="task-name-link" onClick={() => onTaskClick(row.refEntry!)}>
                       {row.displayName}

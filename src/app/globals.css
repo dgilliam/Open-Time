@@ -1318,6 +1318,36 @@ th.num.sortable button {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent);
 }
 
+/* Row-hover-revealed ▶ before each task name ("start again", v3.2), same
+   convention as the week cards' corner ▶; always visible on touch. */
+.timesheet-task-cell {
+  white-space: nowrap;
+}
+
+.timesheet-restart {
+  width: 20px;
+  height: 20px;
+  margin-right: 0.35rem;
+  font-size: 0.6rem;
+  color: var(--muted);
+  opacity: 0;
+}
+
+.timesheet-restart:hover {
+  color: var(--accent);
+}
+
+.timesheet-table tbody tr:hover .timesheet-restart,
+.timesheet-restart:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .timesheet-restart {
+    opacity: 1;
+  }
+}
+
 .timesheet-add-row {
   align-items: center;
   gap: 1rem;
@@ -1596,14 +1626,15 @@ th.num.sortable button {
   cursor: default;
 }
 
-/* Delete is hover-revealed and overlaid in the corner so the task name gets
-   the card's full width (~15 chars at the default column width). Kept
-   always-visible where hover doesn't exist (touch), since the edit drawer
-   offers no delete. */
-.entry-card-delete {
+/* Card actions are hover-revealed and overlaid in the corner so the task
+   name gets the card's full width (~15 chars at the default column width).
+   ▶ (start again, v3.2) takes the corner slot; × (delete) sits beside it.
+   Kept always-visible where hover doesn't exist (touch), since the edit
+   drawer offers neither action. */
+.entry-card-delete,
+.entry-card-restart {
   position: absolute;
   top: 0.3rem;
-  right: 0.3rem;
   width: 22px;
   height: 22px;
   font-size: 1rem;
@@ -1611,13 +1642,31 @@ th.num.sortable button {
   opacity: 0;
 }
 
+.entry-card-restart {
+  right: 0.3rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.entry-card-restart:hover {
+  color: var(--accent);
+}
+
+.entry-card-delete {
+  right: calc(0.3rem + 24px);
+}
+
+/* Locked cards render no delete, so ▶ is the lone corner action there. */
 .entry-card:hover .entry-card-delete,
-.entry-card-delete:focus-visible {
+.entry-card:hover .entry-card-restart,
+.entry-card-delete:focus-visible,
+.entry-card-restart:focus-visible {
   opacity: 1;
 }
 
 @media (hover: none) {
-  .entry-card-delete {
+  .entry-card-delete,
+  .entry-card-restart {
     opacity: 1;
   }
 }

@@ -83,6 +83,7 @@ export function WeekGrid({
   onTaskClick,
   onStatusSaved,
   onDelete,
+  onStartAgain,
 }: {
   /** Sunday (local midnight) of the viewed week. */
   weekStart: Date;
@@ -97,6 +98,8 @@ export function WeekGrid({
   /** Refetch callback for the status badge's in-place cycle. */
   onStatusSaved: () => void;
   onDelete: (id: string) => void;
+  /** "Start again" (v3.2): start/swap the timer onto this card's task. */
+  onStartAgain: (taskName: string) => void;
 }) {
   const { user } = useSession();
   const isAdmin = user?.role === "admin";
@@ -242,6 +245,22 @@ export function WeekGrid({
                             }}
                           >
                             {shortTaskName(entry.taskName)}
+                          </button>
+                          {/* Corner overlay, hover-revealed: ▶ resumes the
+                              task (allowed even on locked entries — a new
+                              session is a new, uninvoiced entry), × deletes.
+                              ▶ takes the corner slot; × sits beside it. */}
+                          <button
+                            type="button"
+                            className="btn-icon entry-card-restart"
+                            aria-label={`Start timer for ${entry.taskName}`}
+                            title="Start again"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onStartAgain(entry.taskName);
+                            }}
+                          >
+                            ▶
                           </button>
                           {!locked && (
                             <button
