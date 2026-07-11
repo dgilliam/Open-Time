@@ -705,6 +705,23 @@ describe("timer", () => {
     expect(running?.id).toBe(second.id);
   });
 
+  it("is an idempotent no-op when the same task is already running (v3.2.1)", () => {
+    const first = repo.startTimer({ userId: userA.id, task: "ab16-same-task" });
+    // Same task again — exact name and a case variant (task identity is
+    // case-insensitive), as a stale tab's "start again" would send.
+    const again = repo.startTimer({ userId: userA.id, task: "ab16-same-task" });
+    const caseVariant = repo.startTimer({ userId: userA.id, task: "AB16-SAME-TASK" });
+
+    expect(again.id).toBe(first.id);
+    expect(caseVariant.id).toBe(first.id);
+    expect(again.stoppedAt).toBeNull();
+
+    // No duplicate entries were minted: still exactly one entry for the task.
+    const entries = repo.listEntries({ userId: userA.id });
+    expect(entries.filter((e) => e.taskId === first.taskId)).toHaveLength(1);
+    expect(repo.getRunningEntry(userA.id)?.id).toBe(first.id);
+  });
+
   it("does not affect another user's running timer", () => {
     const aRunning = repo.startTimer({ userId: userA.id, task: "ab13-a-task" });
     repo.startTimer({ userId: userB.id, task: "ab14-b-task" });

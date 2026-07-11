@@ -159,10 +159,13 @@ export default function Home() {
   }
 
   // "Start again" (v3.2, team feedback): one click on an entry card or
-  // timesheet row resumes its task. Swap UX: a running timer is stopped
-  // silently first — no wrap-up dialog, since the point of the button is
-  // switching tasks without ceremony (the stopped entry can be groomed from
-  // its card later). Clicking the already-running task is a no-op.
+  // timesheet row resumes its task. Swap UX: the server's startTimer
+  // auto-stops any running entry in the same transaction — no wrap-up
+  // dialog, since the point of the button is switching tasks without
+  // ceremony (the stopped entry can be groomed from its card later) — and
+  // is an idempotent no-op when that task is already running (v3.2.1), so a
+  // stale `running` in this tab can never mint duplicate entries. The local
+  // guard is just an optimization that skips the request in the common case.
   const [swapping, setSwapping] = useState(false);
   async function handleStartAgain(taskName: string) {
     if (swapping) return;
@@ -170,7 +173,6 @@ export default function Home() {
     setError(null);
     setSwapping(true);
     try {
-      if (running) await stopTimer();
       const entry = await startTimer({ task: taskName });
       setRunning(entry);
       await loadWeek(weekStart);

@@ -542,6 +542,13 @@ export function startTimer(input: { userId: string; task: string }): TimeEntry {
     // At most one running entry per user: auto-stop (and round) any running one.
     const running = getRunningEntry(input.userId);
     if (running) {
+      // Same task already running: idempotent no-op (v3.2.1). Client-side
+      // guards can't be trusted here — a second tab or a stale `running`
+      // state would otherwise turn every "start again" press into a
+      // stop+start pair, minting a min-rounded 0.5h duplicate entry each
+      // time. Splitting one task into separate sessions stays possible via
+      // an explicit Stop first.
+      if (running.taskId === task.id) return running.id;
       const rawSeconds = (new Date(now).getTime() - new Date(running.startedAt).getTime()) / 1000;
       const durationSecs = roundDurationSecs(rawSeconds);
       db.prepare("UPDATE time_entries SET stopped_at = ?, duration_secs = ? WHERE id = ?").run(
