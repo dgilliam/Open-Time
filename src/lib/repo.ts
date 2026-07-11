@@ -75,6 +75,7 @@ interface EntryRow {
   user_project: string | null;
   invoice_period_id: string | null;
   invoice_period_locked: number | null;
+  task_recorded_secs: number;
 }
 
 function rowToEntry(row: EntryRow): TimeEntry {
@@ -94,6 +95,7 @@ function rowToEntry(row: EntryRow): TimeEntry {
     taskDetails: row.task_details ?? null,
     invoicePeriodId: row.invoice_period_id ?? null,
     invoiceLocked: !!row.invoice_period_locked,
+    taskRecordedSecs: row.task_recorded_secs,
   };
 }
 
@@ -102,6 +104,9 @@ function rowToEntry(row: EntryRow): TimeEntry {
 // never need a second query just to label a list for an admin view. The
 // invoice_periods LEFT JOIN (v2.8) surfaces invoicePeriodId/invoiceLocked so
 // member-facing UIs can grey/hide edit affordances without an extra call.
+// task_recorded_secs (v3.2.1) is the entry owner's rounded all-time total on
+// the entry's task — the timer readout, week cards, and timesheet rows all
+// show a resumed task's running total from it.
 const ENTRY_SELECT = `
   SELECT
     e.id as id,
@@ -118,7 +123,11 @@ const ENTRY_SELECT = `
     u.name as user_name,
     u.project as user_project,
     e.invoice_period_id as invoice_period_id,
-    p.locked as invoice_period_locked
+    p.locked as invoice_period_locked,
+    (SELECT COALESCE(SUM(d.duration_secs), 0)
+       FROM time_entries d
+      WHERE d.user_id = e.user_id AND d.task_id = e.task_id AND d.stopped_at IS NOT NULL
+    ) as task_recorded_secs
   FROM time_entries e
   JOIN tasks t ON t.id = e.task_id
   JOIN users u ON u.id = e.user_id
@@ -568,23 +577,6 @@ export function startTimer(input: { userId: string; task: string }): TimeEntry {
 
   const id = txn();
   return getEntry(id)!;
-}
-
-/**
- * Total rounded seconds this user has already recorded against a task
- * (completed entries only). Served with the timer endpoints (v3.2.1) so a
- * resumed task's headline timer continues from its recorded total instead of
- * restarting at 0:00:00.
- */
-export function taskRecordedSecs(userId: string, taskId: string): number {
-  const row = db
-    .prepare(
-      `SELECT COALESCE(SUM(duration_secs), 0) as total
-       FROM time_entries
-       WHERE user_id = ? AND task_id = ? AND stopped_at IS NOT NULL`
-    )
-    .get(userId, taskId) as { total: number };
-  return row.total;
 }
 
 export function stopTimer(input: { userId: string }): TimeEntry {

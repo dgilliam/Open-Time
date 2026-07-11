@@ -68,6 +68,9 @@ function cardTitle(entry: TimeEntry): string {
     }`,
     `Status: ${STATUS_LABELS[entry.taskStatus] ?? entry.taskStatus}`,
   ];
+  if (entry.taskRecordedSecs != null && entry.taskRecordedSecs > (entry.durationSecs ?? 0)) {
+    lines.splice(2, 0, `Task total: ${hoursLabel(entry.taskRecordedSecs)}`);
+  }
   if (entry.taskLink) lines.push(`Link: ${entry.taskLink}`);
   if (entry.taskDetails) lines.push(entry.taskDetails);
   return lines.join("\n");
@@ -278,6 +281,13 @@ export function WeekGrid({
                         </div>
                         <div className="entry-card-line2">
                           {entry.durationSecs != null ? hoursLabel(entry.durationSecs) : "—"}
+                          {/* All-time task total (v3.2.1), shown when it
+                              exceeds this session so multi-session tasks
+                              read as a running tally, not "just 0.5h". */}
+                          {entry.taskRecordedSecs != null &&
+                            entry.taskRecordedSecs > (entry.durationSecs ?? 0) && (
+                              <span className="entry-card-tasktotal">/ {hoursLabel(entry.taskRecordedSecs)}</span>
+                            )}
                           {(entry.taskLink || entry.taskDetails) && (
                             <span className="entry-card-indicators">
                               {entry.taskLink && (

@@ -742,7 +742,7 @@ describe("timer", () => {
     expectApiError(() => repo.stopTimer({ userId: userA.id }), 409);
   });
 
-  it("taskRecordedSecs sums the user's completed entries for a task only (v3.2.1)", () => {
+  it("entries carry taskRecordedSecs: the owner's completed total for that task only (v3.2.1)", () => {
     const entry = repo.createEntry({
       userId: userA.id,
       task: "ab17-recorded",
@@ -769,11 +769,12 @@ describe("timer", () => {
       stoppedAt: "2026-07-06T11:00:00.000Z",
     });
 
-    expect(repo.taskRecordedSecs(userA.id, entry.taskId)).toBe((1.5 + 1) * 3600);
+    expect(repo.getEntry(entry.id)?.taskRecordedSecs).toBe((1.5 + 1) * 3600);
 
-    // A running entry adds nothing until stopped.
-    repo.startTimer({ userId: userA.id, task: "ab17-recorded" });
-    expect(repo.taskRecordedSecs(userA.id, entry.taskId)).toBe((1.5 + 1) * 3600);
+    // A running entry adds nothing until stopped, and carries the total itself.
+    const running = repo.startTimer({ userId: userA.id, task: "ab17-recorded" });
+    expect(running.taskRecordedSecs).toBe((1.5 + 1) * 3600);
+    expect(repo.getRunningEntry(userA.id)?.taskRecordedSecs).toBe((1.5 + 1) * 3600);
   });
 });
 

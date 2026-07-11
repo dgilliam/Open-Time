@@ -1626,6 +1626,18 @@ th.num.sortable button {
   cursor: default;
 }
 
+/* All-time task total beside a session's hours ("0.5h / 2.5h", v3.2.1);
+   spacing comes from the line's flex gap. */
+.entry-card-tasktotal {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+/* All-time column on the timesheet: quieter than the editable day cells. */
+.timesheet-alltime {
+  color: var(--muted);
+}
+
 /* Card actions are hover-revealed and overlaid in the corner so the task
    name gets the card's full width (~15 chars at the default column width).
    ▶ (start again, v3.2) takes the corner slot; × (delete) sits beside it.

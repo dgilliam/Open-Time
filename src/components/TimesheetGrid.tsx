@@ -239,12 +239,13 @@ export function TimesheetGrid({
                   {WEEKDAY_LABELS[i]} {d.getDate()}
                 </th>
               ))}
+              <th className="num">All time</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="muted">
+                <td colSpan={9} className="muted">
                   No entries this week yet.
                 </td>
               </tr>
@@ -335,6 +336,15 @@ export function TimesheetGrid({
                     </td>
                   );
                 })}
+                {/* All-time recorded total for the row's task (v3.2.1) —
+                    across every week, not just the viewed one, matching the
+                    running readout's baseline. Rows added by hand have no
+                    entries yet, so no total. */}
+                <td className="num timesheet-alltime">
+                  {row.refEntry?.taskRecordedSecs != null
+                    ? formatHoursMinutes(row.refEntry.taskRecordedSecs)
+                    : "-"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -346,6 +356,7 @@ export function TimesheetGrid({
                   {formatHoursMinutes(totalsByDate.get(dateKey) ?? 0)}
                 </td>
               ))}
+              <td className="num" />
             </tr>
           </tfoot>
         </table>
