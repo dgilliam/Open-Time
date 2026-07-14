@@ -147,6 +147,9 @@ export default function DashboardPage() {
   const [entriesFilter, setEntriesFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [editing, setEditing] = useState<TimeEntry | null>(null);
+  // v3.3: "+ Add entry" books time for the member selected in the Entries
+  // filter (holds the target user while the create dialog is open).
+  const [addingFor, setAddingFor] = useState<User | null>(null);
   const [wrapUp, setWrapUp] = useState<WrapUpTarget | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -248,6 +251,16 @@ export default function DashboardPage() {
     await deleteEntry(id);
     await loadAll();
   }
+
+  /** Local 09:00 / 09:30 today, matching the Time entry page's add defaults. */
+  function addTimeDefaults(): { startedAt: string; stoppedAt: string } {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return { startedAt: `${ymd}T09:00:00`, stoppedAt: `${ymd}T09:30:00` };
+  }
+
+  const entriesFilterUser = entriesFilter === "all" ? null : users.find((u) => u.id === entriesFilter) ?? null;
 
   if (!user || user.role !== "admin") return null;
 
@@ -458,6 +471,15 @@ export default function DashboardPage() {
             </h2>
             <div className="toolbar">
               <UserSelect users={users} value={entriesFilter} onChange={setEntriesFilter} label="Member" includeAll />
+              <button
+                type="button"
+                className="btn"
+                disabled={!entriesFilterUser}
+                title={entriesFilterUser ? undefined : "Select a member first"}
+                onClick={() => entriesFilterUser && setAddingFor(entriesFilterUser)}
+              >
+                + Add entry
+              </button>
               <label className="inline-label">
                 Project
                 <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
@@ -564,6 +586,17 @@ export default function DashboardPage() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
+            loadAll();
+          }}
+        />
+      )}
+      {addingFor && (
+        <EntryDialog
+          createDefaults={addTimeDefaults()}
+          createFor={{ userId: addingFor.id, userName: addingFor.name }}
+          onClose={() => setAddingFor(null)}
+          onSaved={() => {
+            setAddingFor(null);
             loadAll();
           }}
         />

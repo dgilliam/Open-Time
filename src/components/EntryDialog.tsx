@@ -6,7 +6,8 @@
 //
 // Edit mode: pass `entry`. Create mode (v2.6 section A, "+ Add time"): pass
 // `createDefaults` instead — prefilled start/stop for the viewed day, empty
-// task via TaskCombobox, saved via POST /api/entries.
+// task via TaskCombobox, saved via POST /api/entries. Admin create-for-member
+// (v3.3): also pass `createFor` and the POST books the entry for that member.
 //
 // Edit mode also exposes the task's wrap-up fields (status/link/details,
 // v2.6 section B) so an entry can be fully groomed in one place. They PATCH
@@ -32,11 +33,14 @@ const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
 export function EntryDialog({
   entry,
   createDefaults,
+  createFor,
   onClose,
   onSaved,
 }: {
   entry?: TimeEntry;
   createDefaults?: { startedAt: string; stoppedAt: string };
+  /** Admin only (v3.3): create mode books the entry for this member. */
+  createFor?: { userId: string; userName: string };
   onClose: () => void;
   onSaved: (entry: TimeEntry) => void;
 }) {
@@ -70,6 +74,7 @@ export function EntryDialog({
             task,
             startedAt: fromDatetimeLocalValue(startedAt),
             stoppedAt: fromDatetimeLocalValue(stoppedAt),
+            userId: createFor?.userId,
           })
         : await updateEntry(entry.id, {
             task,
@@ -88,7 +93,11 @@ export function EntryDialog({
   }
 
   return (
-    <Dialog title={isCreate ? "Add time" : "Edit entry"} onClose={onClose} variant="drawer">
+    <Dialog
+      title={isCreate ? (createFor ? `Add time — ${createFor.userName}` : "Add time") : "Edit entry"}
+      onClose={onClose}
+      variant="drawer"
+    >
       <form className="form" onSubmit={handleSubmit}>
         <label>
           Task

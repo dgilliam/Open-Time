@@ -128,7 +128,13 @@ export function listEntries(opts: { userId?: string; from?: string; to?: string 
   return request<TimeEntry[]>(`/api/entries${qs ? `?${qs}` : ""}`);
 }
 
-export function createEntry(input: { task: string; startedAt: string; stoppedAt: string }): Promise<TimeEntry> {
+export function createEntry(input: {
+  task: string;
+  startedAt: string;
+  stoppedAt: string;
+  /** Admin only (v3.3): create the entry for this member instead of the caller. */
+  userId?: string;
+}): Promise<TimeEntry> {
   return request<TimeEntry>("/api/entries", { method: "POST", body: JSON.stringify(input) });
 }
 

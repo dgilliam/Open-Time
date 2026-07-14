@@ -109,6 +109,47 @@ describe("GET /api/entries authorization", () => {
   });
 });
 
+describe("POST /api/entries with userId (v3.3 admin add-for-member)", () => {
+  const body = {
+    task: "zz90-backfilled-by-admin",
+    startedAt: "2026-07-06T16:00:00.000Z",
+    stoppedAt: "2026-07-06T17:00:00.000Z",
+  };
+
+  it("admin creates an entry for a member; the entry belongs to the member", async () => {
+    const res = await entriesRoute.POST(
+      req("/api/entries", { token: adminToken, method: "POST", body: { ...body, userId: userB.id } })
+    );
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.data.userId).toBe(userB.id);
+    expect(repo.listEntries({ userId: userB.id })).toHaveLength(2); // seeded one + this
+  });
+
+  it("403s a member creating an entry for someone else", async () => {
+    const res = await entriesRoute.POST(
+      req("/api/entries", { token: tokenA, method: "POST", body: { ...body, userId: userB.id } })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("a member passing their own userId is allowed (equivalent to omitting it)", async () => {
+    const res = await entriesRoute.POST(
+      req("/api/entries", { token: tokenA, method: "POST", body: { ...body, userId: userA.id } })
+    );
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.data.userId).toBe(userA.id);
+  });
+
+  it("omitting userId still creates for the caller", async () => {
+    const res = await entriesRoute.POST(req("/api/entries", { token: tokenA, method: "POST", body }));
+    expect(res.status).toBe(201);
+    const json = await res.json();
+    expect(json.data.userId).toBe(userA.id);
+  });
+});
+
 describe("GET /api/entries?userId=all authorization (v2.2 admin dashboard)", () => {
   it("403s a member requesting userId=all", async () => {
     const res = await entriesRoute.GET(req(`/api/entries?userId=all`, { token: tokenA }));

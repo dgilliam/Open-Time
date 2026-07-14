@@ -25,8 +25,13 @@ export async function POST(req: NextRequest) {
   try {
     const user = requireUser(req);
     const body = await req.json();
+    // Optional userId lets the admin backfill hours for a member (v3.3, same
+    // self-or-admin rule as GET above and as entry PUT/DELETE). Members can
+    // only pass their own id.
+    const targetUserId = body?.userId ?? user.id;
+    assertSelfOrAdmin(user, targetUserId);
     const entry = createEntry({
-      userId: user.id,
+      userId: targetUserId,
       task: body?.task,
       startedAt: body?.startedAt,
       stoppedAt: body?.stoppedAt,
