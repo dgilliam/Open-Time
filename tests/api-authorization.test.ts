@@ -237,6 +237,53 @@ describe("PATCH /api/users/[id] authorization (admin only, v2.5)", () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it("admin password reset changes the login and kills the member's sessions (v3.4)", async () => {
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/${userB.id}`, { method: "PATCH", token: adminToken, body: { password: "fresh-secret-9" } }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(200);
+
+    // Old session no longer resolves; old password no longer verifies; new one does.
+    expect(auth.getSessionUser(tokenB)).toBeNull();
+    const hash = (
+      db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userB.id) as { password_hash: string }
+    ).password_hash;
+    expect(auth.verifyPassword("password123", hash)).toBe(false);
+    expect(auth.verifyPassword("fresh-secret-9", hash)).toBe(true);
+  });
+
+  it("400s a too-short password and changes nothing", async () => {
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/${userB.id}`, { method: "PATCH", token: adminToken, body: { password: "short" } }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(400);
+    expect(auth.getSessionUser(tokenB)?.id).toBe(userB.id);
+  });
+
+  it("admin resetting their own password keeps their session alive", async () => {
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/${admin.id}`, { method: "PATCH", token: adminToken, body: { password: "my-new-admin-pw" } }),
+      { params: Promise.resolve({ id: admin.id }) }
+    );
+    expect(res.status).toBe(200);
+    expect(auth.getSessionUser(adminToken)?.id).toBe(admin.id);
+  });
+
+  it("a plain name/project patch never touches the password or sessions", async () => {
+    const res = await userByIdRoute.PATCH(
+      req(`/api/users/${userB.id}`, { method: "PATCH", token: adminToken, body: { name: "Bobby" } }),
+      { params: Promise.resolve({ id: userB.id }) }
+    );
+    expect(res.status).toBe(200);
+    expect(auth.getSessionUser(tokenB)?.id).toBe(userB.id);
+    const hash = (
+      db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userB.id) as { password_hash: string }
+    ).password_hash;
+    expect(auth.verifyPassword("password123", hash)).toBe(true);
+  });
 });
 
 describe("DELETE /api/users/[id] and restore (admin only, v2.7 soft-delete)", () => {

@@ -261,6 +261,7 @@ function EditMemberDialog({
 }) {
   const [name, setName] = useState(user.name);
   const [project, setProject] = useState(user.project ?? "");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -269,7 +270,13 @@ function EditMemberDialog({
     setError(null);
     setSaving(true);
     try {
-      const updated = await updateUser(user.id, { name, project });
+      // password only rides along when actually typed — blank keeps the
+      // member's current login untouched.
+      const updated = await updateUser(user.id, {
+        name,
+        project,
+        password: password || undefined,
+      });
       onSaved(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "failed to save member");
@@ -297,6 +304,17 @@ function EditMemberDialog({
             onChange={(e) => setProject(e.target.value)}
             maxLength={60}
             placeholder="e.g. AI Assessor"
+          />
+        </label>
+        <label>
+          New password <span className="muted">(optional — resets their login, min 8 chars)</span>
+          <input
+            type="text"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            minLength={8}
+            autoComplete="off"
+            placeholder="leave blank to keep current"
           />
         </label>
         {error && <p className="error-text">{error}</p>}

@@ -85,7 +85,15 @@ export function createUser(input: {
   return request<User>("/api/users", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateUser(id: string, patch: { name?: string; project?: string | null }): Promise<User> {
+export function updateUser(
+  id: string,
+  patch: {
+    name?: string;
+    project?: string | null;
+    /** Admin only (v3.4): resets the member's password and signs out their sessions. */
+    password?: string;
+  }
+): Promise<User> {
   return request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
 

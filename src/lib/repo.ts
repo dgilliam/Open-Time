@@ -231,8 +231,19 @@ export function createUser(input: {
   return { id, name, email, role: input.role, createdAt, project, deletedAt: null };
 }
 
-/** Admin-only patch of a member's name and/or project. 404 if the user doesn't exist. */
-export function updateUser(id: string, patch: { name?: string; project?: string | null }): User {
+/**
+ * Admin-only patch of a member's name, project, and/or password (v3.4).
+ * 404 if the user doesn't exist. A password reset (same ≥8-char rule as
+ * createUser) also deletes the target's sessions in the same transaction —
+ * whoever held the old password is signed out immediately, mirroring
+ * removeUser — except when the admin is resetting their own password
+ * (`actingUserId === id`), which would pointlessly log them out mid-request.
+ */
+export function updateUser(
+  id: string,
+  patch: { name?: string; project?: string | null; password?: string },
+  actingUserId?: string
+): User {
   const existing = getUserById(id);
   if (!existing) throw new ApiError(404, "user not found");
 
@@ -243,7 +254,22 @@ export function updateUser(id: string, patch: { name?: string; project?: string 
   }
   const project = patch.project !== undefined ? normalizeProject(patch.project) : existing.project;
 
-  db.prepare("UPDATE users SET name = ?, project = ? WHERE id = ?").run(name, project, id);
+  let passwordHash: string | null = null;
+  if (patch.password !== undefined) {
+    if (patch.password.length < 8) throw new ApiError(400, "password must be at least 8 characters");
+    passwordHash = hashPassword(patch.password);
+  }
+
+  const txn = db.transaction(() => {
+    db.prepare("UPDATE users SET name = ?, project = ? WHERE id = ?").run(name, project, id);
+    if (passwordHash !== null) {
+      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, id);
+      if (id !== actingUserId) {
+        db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+      }
+    }
+  });
+  txn();
   return getUserById(id)!;
 }
 
