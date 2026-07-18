@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db } from "./db";
 import { hashPassword } from "./auth";
-import { assertEntryEditable } from "./invoices";
+import { assertEntryEditable, tzOffsetMinutesAt } from "./invoices";
 import { ApiError } from "./types";
 import type {
   CalendarDay,
@@ -637,14 +637,71 @@ export function localDateKey(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export function calendarBuckets(opts: { userId: string; from?: string; to?: string }): CalendarDay[] {
+// ---------- viewer-timezone date keys (v3.4.1) ----------
+// The server runs in UTC on Railway, so dating entries with localDateKey
+// shifted anything logged after 7 PM Central onto the next day in reports,
+// the CSV, and — worst — timesheet cell matching, which silently missed the
+// viewer's late-evening entries. Callers now pass the browser's IANA zone
+// and these helpers date entries in it (same Intl-only approach as the
+// invoice cutoff math). No zone still means the server's own — existing
+// callers and tests keep their behavior.
+
+const zoneDateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function zoneFormatter(timeZone: string): Intl.DateTimeFormat {
+  let fmt = zoneDateFormatters.get(timeZone);
+  if (!fmt) {
+    try {
+      // en-CA renders as YYYY-MM-DD.
+      fmt = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+    } catch {
+      throw new ApiError(400, "invalid timezone");
+    }
+    zoneDateFormatters.set(timeZone, fmt);
+  }
+  return fmt;
+}
+
+/** Throws 400 for a garbage IANA zone name; cheap no-op for a valid one. */
+export function assertValidZone(timeZone: string): void {
+  zoneFormatter(timeZone);
+}
+
+/** YYYY-MM-DD of `iso` in the given IANA zone; server-local when no zone given. */
+export function zoneDateKey(iso: string, timeZone?: string): string {
+  if (!timeZone) return localDateKey(iso);
+  return zoneFormatter(timeZone).format(new Date(iso));
+}
+
+/**
+ * UTC instant of wall-clock 09:00 on `date` (YYYY-MM-DD) in `timeZone`;
+ * server-local when no zone given. Same guess-and-correct offset derivation
+ * as invoices.ts's pacificCutoffUtc — exact across DST transitions.
+ */
+function nineAmInZone(date: string, timeZone?: string): Date {
+  const [y, m, d] = date.split("-").map(Number);
+  if (!timeZone) return new Date(y, m - 1, d, 9, 0, 0, 0);
+  const guessMs = Date.UTC(y, m - 1, d, 9, 0, 0);
+  const offset1 = tzOffsetMinutesAt(new Date(guessMs), timeZone);
+  let utcMs = guessMs - offset1 * 60_000;
+  const offset2 = tzOffsetMinutesAt(new Date(utcMs), timeZone);
+  if (offset2 !== offset1) utcMs = guessMs - offset2 * 60_000;
+  return new Date(utcMs);
+}
+
+export function calendarBuckets(opts: {
+  userId: string;
+  from?: string;
+  to?: string;
+  tz?: string; // viewer's IANA zone (v3.4.1); server-local when absent
+}): CalendarDay[] {
   const entries = listEntries({ userId: opts.userId, from: opts.from, to: opts.to }).filter(
     (e) => e.durationSecs !== null
   );
 
   const byDate = new Map<string, number>();
   for (const entry of entries) {
-    const key = localDateKey(entry.startedAt);
+    const key = zoneDateKey(entry.startedAt, opts.tz);
     byDate.set(key, (byDate.get(key) ?? 0) + (entry.durationSecs as number));
   }
 
@@ -660,6 +717,7 @@ export function report(opts: {
   from?: string;
   to?: string;
   groupBy: "task" | "user";
+  tz?: string; // viewer's IANA zone for the worked-dates lists (v3.4.1); server-local when absent
 }): ReportResult {
   interface Acc {
     id: string;
@@ -735,7 +793,7 @@ export function report(opts: {
         e.taskId,
         e.taskName,
         e.durationSecs as number,
-        localDateKey(e.startedAt),
+        zoneDateKey(e.startedAt, opts.tz),
         { id: e.userId, name: e.userName },
         e.taskId,
         undefined,
@@ -752,7 +810,7 @@ export function report(opts: {
         e.userId,
         e.userName,
         e.durationSecs as number,
-        localDateKey(e.startedAt),
+        zoneDateKey(e.startedAt, opts.tz),
         undefined,
         e.taskId,
         e.userProject
@@ -800,16 +858,20 @@ export function report(opts: {
 const TIMESHEET_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Replaces a single user's COMPLETED entries for one task+local-date with (at
- * most) one synthetic entry starting at 09:00 local that day. Running entries
- * are never selected by this query (stopped_at IS NOT NULL), so they're
- * untouched and never counted. hours <= 0 deletes without inserting.
+ * Replaces a single user's COMPLETED entries for one task+date with (at
+ * most) one synthetic entry starting at 09:00 that day — where "date" and
+ * "09:00" mean the viewer's timezone when `tz` is given (v3.4.1; the
+ * timesheet grid buckets by browser date, so matching must too), the
+ * server's otherwise. Running entries are never selected by this query
+ * (stopped_at IS NOT NULL), so they're untouched and never counted.
+ * hours <= 0 deletes without inserting.
  */
 export function setTimesheetCell(input: {
   userId: string;
   task: string;
   date: string;
   hours: number;
+  tz?: string;
   actingUser?: { id: string; role: Role };
 }): { hours: number } {
   if (!input.userId) throw new ApiError(400, "userId is required");
@@ -822,6 +884,7 @@ export function setTimesheetCell(input: {
   if (!TIMESHEET_DATE_RE.test(input.date || "")) {
     throw new ApiError(400, "date must be in YYYY-MM-DD format");
   }
+  if (input.tz) assertValidZone(input.tz); // 400 up front, before the transaction
 
   // Validates + normalizes the task name (throws 400 on bad format) without
   // creating a task just to immediately clear a cell that never had one.
@@ -843,7 +906,7 @@ export function setTimesheetCell(input: {
         started_at: string;
         invoice_period_id: string | null;
       }[];
-      const matching = rows.filter((row) => localDateKey(row.started_at) === input.date);
+      const matching = rows.filter((row) => zoneDateKey(row.started_at, input.tz) === input.date);
       // Check every affected entry for a locked invoice period BEFORE deleting
       // any of them — a 403 must leave the cell untouched, not partially
       // cleared (docs/PLAN.md v2.8 locking).
@@ -859,8 +922,7 @@ export function setTimesheetCell(input: {
 
     const task = existingTaskRow ?? findOrCreateTask(input.task);
     const durationSecs = roundDurationSecs(input.hours * 3600);
-    const [y, m, d] = input.date.split("-").map(Number);
-    const startedAt = new Date(y, m - 1, d, 9, 0, 0, 0);
+    const startedAt = nineAmInZone(input.date, input.tz);
     const stoppedAt = new Date(startedAt.getTime() + durationSecs * 1000);
     const id = randomUUID();
     const createdAt = new Date().toISOString();

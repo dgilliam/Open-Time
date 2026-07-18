@@ -12,6 +12,18 @@ import type {
   User,
 } from "./types";
 
+// The browser's IANA zone, sent with date-bucketing requests so the server
+// dates entries by the viewer's day, not its own (v3.4.1 — the server runs
+// UTC in production). Guarded for non-browser contexts (tests import this
+// module under Node, where Intl still resolves a zone, but stay defensive).
+const BROWSER_TZ: string | undefined = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+})();
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -179,6 +191,7 @@ export function stopTimer(): Promise<TimeEntry> {
 export function getCalendar(opts: { userId?: string; from: string; to: string }): Promise<CalendarDay[]> {
   const params = new URLSearchParams({ from: opts.from, to: opts.to });
   if (opts.userId) params.set("userId", opts.userId);
+  if (BROWSER_TZ) params.set("tz", BROWSER_TZ);
   return request<CalendarDay[]>(`/api/calendar?${params.toString()}`);
 }
 
@@ -197,6 +210,7 @@ export function getReport(opts: {
 }): Promise<ReportResult> {
   const params = new URLSearchParams({ from: opts.from, to: opts.to, groupBy: opts.groupBy });
   if (opts.userId) params.set("userId", opts.userId);
+  if (BROWSER_TZ) params.set("tz", BROWSER_TZ);
   return request<ReportResult>(`/api/reports?${params.toString()}`);
 }
 
@@ -213,6 +227,7 @@ export function reportsCsvUrl(opts: {
 }): string {
   const params = new URLSearchParams({ from: opts.from, to: opts.to });
   if (opts.userId) params.set("userId", opts.userId);
+  if (BROWSER_TZ) params.set("tz", BROWSER_TZ);
   // Caller passes the "__none__" sentinel directly for "No project" — see
   // the dashboard's Entries export.
   if (opts.project) params.set("project", opts.project);
@@ -222,7 +237,10 @@ export function reportsCsvUrl(opts: {
 // ---------- timesheet ----------
 
 export function setTimesheetCell(input: { task: string; date: string; hours: number }): Promise<{ hours: number }> {
-  return request<{ hours: number }>("/api/timesheet/cell", { method: "PUT", body: JSON.stringify(input) });
+  return request<{ hours: number }>("/api/timesheet/cell", {
+    method: "PUT",
+    body: JSON.stringify({ ...input, tz: BROWSER_TZ }),
+  });
 }
 
 // ---------- invoices (v2.8, admin only) ----------

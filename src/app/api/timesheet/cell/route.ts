@@ -15,6 +15,7 @@ export async function PUT(req: NextRequest) {
       task: body?.task,
       date: body?.date,
       hours: body?.hours,
+      tz: typeof body?.tz === "string" ? body.tz : undefined,
       actingUser: user,
     });
     return NextResponse.json({ data: result });

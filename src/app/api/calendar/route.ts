@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
     const from = params.get("from") ?? undefined;
     const to = params.get("to") ?? undefined;
-    return NextResponse.json({ data: calendarBuckets({ userId: targetUserId, from, to }) });
+    return NextResponse.json({ data: calendarBuckets({ userId: targetUserId, from, to, tz: params.get("tz") ?? undefined }) });
   } catch (err) {
     const { status, body } = apiErrorResponse(err);
     return NextResponse.json(body, { status });

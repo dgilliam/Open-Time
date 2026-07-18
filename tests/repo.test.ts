@@ -984,6 +984,22 @@ describe("report — dates + recency sort (v2.1)", () => {
     expect(group.lastWorked).toBe("2026-01-03");
   });
 
+  it("dates entries in the viewer's zone when tz is passed (v3.4.1)", () => {
+    // 02:30 UTC on Jul 18 = 9:30 PM Jul 17 in Chicago (CDT, UTC-5).
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab28-late-night",
+      startedAt: "2026-07-18T02:30:00.000Z",
+      stoppedAt: "2026-07-18T04:00:00.000Z",
+    });
+
+    const chicago = repo.report({ userId: userA.id, groupBy: "task", tz: "America/Chicago" });
+    expect(chicago.groups.find((g) => g.name === "AB28-late-night")!.dates).toEqual(["2026-07-17"]);
+
+    const utc = repo.report({ userId: userA.id, groupBy: "task", tz: "UTC" });
+    expect(utc.groups.find((g) => g.name === "AB28-late-night")!.dates).toEqual(["2026-07-18"]);
+  });
+
   it("sorts all groups by most recent activity desc, regardless of total hours", () => {
     // Task alpha: 5 hours total, but last worked earlier.
     repo.createEntry({
@@ -1198,6 +1214,47 @@ describe("setTimesheetCell", () => {
       hours: 3.2,
     });
     expect(result.hours).toBe(3);
+  });
+
+  it("matches and books the cell in the viewer's zone when tz is passed (v3.4.1)", () => {
+    // 9:30 PM Jul 17 Chicago = 02:30 UTC Jul 18: belongs to the Jul 17 cell
+    // for a Chicago viewer even though its UTC date is the 18th.
+    repo.createEntry({
+      userId: userA.id,
+      task: "ab39-tz-cell",
+      startedAt: "2026-07-18T02:30:00.000Z",
+      stoppedAt: "2026-07-18T04:00:00.000Z",
+    });
+
+    const result = repo.setTimesheetCell({
+      userId: userA.id,
+      task: "ab39-tz-cell",
+      date: "2026-07-17",
+      hours: 4,
+      tz: "America/Chicago",
+    });
+    expect(result.hours).toBe(4);
+
+    // The late-night entry was REPLACED (not duplicated) by one synthetic
+    // entry starting 09:00 Chicago = 14:00 UTC (CDT is UTC-5 in July).
+    const entries = repo.listEntries({ userId: userA.id }).filter((e) => e.taskName === "AB39-tz-cell");
+    expect(entries.length).toBe(1);
+    expect(entries[0].startedAt).toBe("2026-07-17T14:00:00.000Z");
+    expect(entries[0].durationSecs).toBe(4 * 3600);
+  });
+
+  it("400s an invalid tz without touching anything", () => {
+    expectApiError(
+      () =>
+        repo.setTimesheetCell({
+          userId: userA.id,
+          task: "ab40-bad-tz",
+          date: "2026-07-17",
+          hours: 1,
+          tz: "Not/AZone",
+        }),
+      400
+    );
   });
 
   it("replaces multiple existing completed entries for that task+day with a single one", () => {

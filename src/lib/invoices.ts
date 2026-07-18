@@ -33,7 +33,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * offset is derived from how the zone actually renders that specific
  * instant, not from a fixed UTC delta.
  */
-function tzOffsetMinutesAt(instant: Date, timeZone: string): number {
+export function tzOffsetMinutesAt(instant: Date, timeZone: string): number {
   const dtf = new Intl.DateTimeFormat("en-US", {
     timeZone,
     hourCycle: "h23",

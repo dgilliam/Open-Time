@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertSelfOrAdmin, requireUser } from "@/lib/auth";
-import { listEntries, localDateKey } from "@/lib/repo";
+import { listEntries, localDateKey, zoneDateKey } from "@/lib/repo";
 import { apiErrorResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
     assertSelfOrAdmin(user, targetUserId);
 
     const from = params.get("from") ?? undefined;
+    // Viewer's IANA zone for the date column (v3.4.1); optional.
+    const tz = params.get("tz") ?? undefined;
     const to = params.get("to") ?? undefined;
 
     // project: absent = off; "__none__" sentinel = unassigned members only
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
         taskLink: e.taskLink ?? "",
         taskDetails: e.taskDetails ?? "",
         durationHours: (e.durationSecs as number) / 3600,
-        date: localDateKey(e.startedAt),
+        date: zoneDateKey(e.startedAt, tz),
       }))
       .sort((a, b) => {
         if (a.date !== b.date) return a.date < b.date ? -1 : 1;

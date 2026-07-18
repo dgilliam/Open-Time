@@ -12,6 +12,8 @@ export async function GET(req: NextRequest) {
     const from = params.get("from") ?? undefined;
     const to = params.get("to") ?? undefined;
     const groupByParam = params.get("groupBy") ?? "task";
+    // Viewer's IANA zone for the worked-dates lists (v3.4.1); optional.
+    const tz = params.get("tz") ?? undefined;
     if (groupByParam !== "task" && groupByParam !== "user") {
       throw new ApiError(400, "groupBy must be 'task' or 'user'");
     }
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest) {
     if (groupByParam === "user") {
       // groupBy=user is an admin-only cross-team overview.
       if (user.role !== "admin") throw new ApiError(403, "admin only");
-      const result = report({ from, to, groupBy: "user" });
+      const result = report({ from, to, groupBy: "user", tz });
       return NextResponse.json({ data: result });
     }
 
@@ -27,7 +29,7 @@ export async function GET(req: NextRequest) {
     if (targetUserId !== user.id && user.role !== "admin") {
       throw new ApiError(403, "forbidden");
     }
-    const result = report({ userId: targetUserId, from, to, groupBy: "task" });
+    const result = report({ userId: targetUserId, from, to, groupBy: "task", tz });
     return NextResponse.json({ data: result });
   } catch (err) {
     const { status, body } = apiErrorResponse(err);
