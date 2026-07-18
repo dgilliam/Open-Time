@@ -14,7 +14,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ApiError,
   deleteEntry,
-  getCalendar,
   getRunningEntry,
   listEntries,
   startTimer,
@@ -35,6 +34,25 @@ type Mode = "week" | "timesheet" | "month";
 function endOfMonthIso(month: Date): string {
   const nextMonth = new Date(month.getFullYear(), month.getMonth() + 1, 1);
   return toIso(new Date(nextMonth.getTime() - 1));
+}
+
+/**
+ * Buckets completed entries into per-day hours by the BROWSER's local date —
+ * the same rule the week grid uses (v3.4.1). The server's /api/calendar
+ * buckets by the SERVER's timezone (UTC on Railway), which pushed
+ * late-evening entries onto the next day for anyone west of it, so month
+ * mode and the heatmap now bucket client-side instead.
+ */
+function bucketByLocalDate(entries: TimeEntry[]): CalendarDay[] {
+  const byDate = new Map<string, number>();
+  for (const e of entries) {
+    if (e.durationSecs == null) continue;
+    const key = dateInputValue(new Date(e.startedAt));
+    byDate.set(key, (byDate.get(key) ?? 0) + e.durationSecs);
+  }
+  return Array.from(byDate.entries())
+    .map(([date, secs]) => ({ date, hours: secs / 3600 }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
 /** Local 09:00 / 09:30 of `day`, formatted for the <input type="datetime-local"> defaults. */
@@ -91,13 +109,13 @@ export default function Home() {
     loadWeek(weekStart);
   }, [weekStart, ready, loadWeek]);
 
-  // Month mode: month grid data, refetched on month navigation. userId
-  // omitted — the API defaults to the caller's own id (self-only, matching
-  // the retired /calendar page's member behavior with no person-selector).
+  // Month mode: month grid data, refetched on month navigation. Self-only
+  // (listEntries defaults to the caller), bucketed in the browser so a day
+  // means the viewer's day, not the server's (v3.4.1).
   useEffect(() => {
     if (!ready || mode !== "month") return;
-    getCalendar({ from: toIso(startOfMonth(month)), to: endOfMonthIso(month) })
-      .then(setMonthData)
+    listEntries({ from: toIso(startOfMonth(month)), to: endOfMonthIso(month) })
+      .then((entries) => setMonthData(bucketByLocalDate(entries)))
       .catch(() => setMonthData([]));
   }, [ready, mode, month]);
 
@@ -108,9 +126,9 @@ export default function Home() {
     const today = startOfDay(new Date());
     const rangeEnd = addDays(startOfWeek(today), 6);
     const rangeStart = startOfWeek(new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() + 1));
-    getCalendar({ from: toIso(rangeStart), to: toIso(rangeEnd) })
-      .then((data) => {
-        const byDate = new Map(data.map((d) => [d.date, d.hours]));
+    listEntries({ from: toIso(rangeStart), to: toIso(rangeEnd) })
+      .then((entries) => {
+        const byDate = new Map(bucketByLocalDate(entries).map((d) => [d.date, d.hours]));
         const days: { date: Date; hours: number }[] = [];
         for (let d = rangeStart; d <= rangeEnd; d = addDays(d, 1)) {
           days.push({ date: d, hours: byDate.get(dateInputValue(d)) ?? 0 });
