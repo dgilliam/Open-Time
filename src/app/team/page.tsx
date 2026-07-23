@@ -173,6 +173,55 @@ export default function TeamPage() {
   );
 }
 
+/**
+ * Readable one-time password for handing to a teammate over Slack (v3.5):
+ * 16 chars in 4 dash-joined groups from an unambiguous charset (no 0/O, 1/l/I
+ * lookalikes) — ~79 bits from crypto.getRandomValues.
+ */
+function generatePassword(): string {
+  const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+  const buf = new Uint32Array(16);
+  crypto.getRandomValues(buf);
+  const pick = Array.from(buf, (n) => chars[n % chars.length]);
+  return [0, 4, 8, 12].map((i) => pick.slice(i, i + 4).join("")).join("-");
+}
+
+/** Generate + Copy buttons beside a password input (Add member and Edit member's reset field). */
+function PasswordTools({ value, onGenerate }: { value: string; onGenerate: (pw: string) => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className="btn"
+        onClick={() => {
+          onGenerate(generatePassword());
+          setCopied(false);
+        }}
+      >
+        Generate
+      </button>
+      <button
+        type="button"
+        className="btn"
+        disabled={!value}
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } catch {
+            // Clipboard API unavailable (permissions/insecure context) — the
+            // value stays visible in the input for manual copy.
+          }
+        }}
+      >
+        {copied ? "Copied ✓" : "Copy"}
+      </button>
+    </>
+  );
+}
+
 function AddMemberDialog({
   onClose,
   onCreated,
@@ -218,13 +267,16 @@ function AddMemberDialog({
         </label>
         <label>
           Temporary password
-          <input
-            type="text"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
-            required
-          />
+          <div className="input-with-tools">
+            <input
+              type="text"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={8}
+              required
+            />
+            <PasswordTools value={password} onGenerate={setPassword} />
+          </div>
         </label>
         <label>
           Project <span className="muted">(optional)</span>
@@ -308,14 +360,17 @@ function EditMemberDialog({
         </label>
         <label>
           New password <span className="muted">(optional — resets their login, min 8 chars)</span>
-          <input
-            type="text"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            minLength={8}
-            autoComplete="off"
-            placeholder="leave blank to keep current"
-          />
+          <div className="input-with-tools">
+            <input
+              type="text"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={8}
+              autoComplete="off"
+              placeholder="leave blank to keep current"
+            />
+            <PasswordTools value={password} onGenerate={setPassword} />
+          </div>
         </label>
         {error && <p className="error-text">{error}</p>}
         <div className="dialog-actions">

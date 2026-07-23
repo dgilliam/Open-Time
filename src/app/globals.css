@@ -795,6 +795,18 @@ tfoot td {
   text-decoration: underline;
 }
 
+/* Password input + Generate/Copy buttons on one row (Team dialogs, v3.5). */
+.input-with-tools {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.input-with-tools input {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ---------- dialog ---------- */
 
 .dialog-backdrop {
