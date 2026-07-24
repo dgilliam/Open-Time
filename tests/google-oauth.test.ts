@@ -113,6 +113,37 @@ describe("GET /api/auth/google (start)", () => {
     expect(stateCookie.split(";")[0].split("=")[1]).toBe(target.searchParams.get("state"));
     expect(cookies.some((c) => c.startsWith("ot_google_verifier="))).toBe(true);
   });
+
+  it("derives the public redirect_uri from x-forwarded-* behind a proxy (v3.6.1)", async () => {
+    // Railway terminates TLS and forwards to the app's internal origin —
+    // the redirect_uri sent to Google must be the PUBLIC host, not that.
+    const res = await startRoute.GET(
+      new NextRequest("https://localhost:8080/api/auth/google", {
+        headers: { "x-forwarded-host": "time.reposcout.com", "x-forwarded-proto": "https" },
+      })
+    );
+    const target = new URL(location(res));
+    expect(target.searchParams.get("redirect_uri")).toBe(
+      "https://time.reposcout.com/api/auth/google/callback"
+    );
+  });
+
+  it("OPENTIME_BASE_URL overrides everything", async () => {
+    process.env.OPENTIME_BASE_URL = "https://override.example";
+    try {
+      const res = await startRoute.GET(
+        new NextRequest("https://localhost:8080/api/auth/google", {
+          headers: { "x-forwarded-host": "time.reposcout.com", "x-forwarded-proto": "https" },
+        })
+      );
+      const target = new URL(location(res));
+      expect(target.searchParams.get("redirect_uri")).toBe(
+        "https://override.example/api/auth/google/callback"
+      );
+    } finally {
+      delete process.env.OPENTIME_BASE_URL;
+    }
+  });
 });
 
 describe("GET /api/auth/google/callback", () => {
@@ -121,6 +152,7 @@ describe("GET /api/auth/google/callback", () => {
     const res = await callbackRoute.GET(
       callbackReq({ code: "c1", state: "s1", cookieState: "s1", verifier: "v1" })
     );
+    // No proxy headers in this request, so base falls back to the request origin.
     expect(location(res)).toBe("http://localhost/");
     const token = sessionTokenFrom(res);
     expect(token).toBeTruthy();

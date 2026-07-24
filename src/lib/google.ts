@@ -33,13 +33,26 @@ export function googleEnabled(): boolean {
 }
 
 /**
- * The absolute callback URL. Derived from the request origin by default;
- * OPENTIME_BASE_URL overrides it for deployments where the proxy origin
- * isn't what Google should redirect to (see DEPLOY.md).
+ * The app's public base URL as the BROWSER sees it — required for the
+ * redirect URI sent to Google and for the OAuth routes' own redirects.
+ * Behind a reverse proxy (Railway), req.nextUrl.origin is the app's
+ * internal address (e.g. https://localhost:8080), so: explicit
+ * OPENTIME_BASE_URL wins, then the proxy's x-forwarded-host/proto
+ * headers, then the raw request origin (correct for local dev).
  */
-export function googleRedirectUri(requestOrigin: string): string {
-  const base = process.env.OPENTIME_BASE_URL || requestOrigin;
-  return `${base.replace(/\/$/, "")}/api/auth/google/callback`;
+export function appBaseUrl(req: { headers: Headers; nextUrl: { origin: string } }): string {
+  if (process.env.OPENTIME_BASE_URL) return process.env.OPENTIME_BASE_URL.replace(/\/$/, "");
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  if (forwardedHost) {
+    const proto = req.headers.get("x-forwarded-proto") ?? "https";
+    return `${proto}://${forwardedHost}`;
+  }
+  return req.nextUrl.origin;
+}
+
+/** The absolute callback URL registered with Google. */
+export function googleRedirectUri(baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/, "")}/api/auth/google/callback`;
 }
 
 /** Random URL-safe string for `state` and the PKCE code verifier. */

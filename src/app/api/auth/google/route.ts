@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   GOOGLE_STATE_COOKIE,
   GOOGLE_VERIFIER_COOKIE,
+  appBaseUrl,
   googleAuthUrl,
   googleEnabled,
   googleRedirectUri,
@@ -18,8 +19,9 @@ export const dynamic = "force-dynamic";
  * login page's button.
  */
 export async function GET(req: NextRequest) {
+  const base = appBaseUrl(req);
   if (!googleEnabled()) {
-    return NextResponse.redirect(new URL("/login?error=google_unconfigured", req.nextUrl.origin));
+    return NextResponse.redirect(new URL("/login?error=google_unconfigured", base));
   }
 
   const state = randomToken();
@@ -27,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(googleAuthUrl());
   url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID ?? "");
-  url.searchParams.set("redirect_uri", googleRedirectUri(req.nextUrl.origin));
+  url.searchParams.set("redirect_uri", googleRedirectUri(base));
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", "openid email");
   url.searchParams.set("state", state);

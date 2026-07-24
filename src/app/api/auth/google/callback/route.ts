@@ -3,6 +3,7 @@ import { createSession, setSessionCookie } from "@/lib/auth";
 import {
   GOOGLE_STATE_COOKIE,
   GOOGLE_VERIFIER_COOKIE,
+  appBaseUrl,
   googleEnabled,
   googleRedirectUri,
   resolveGoogleEmail,
@@ -19,8 +20,11 @@ export const dynamic = "force-dynamic";
  * emails are members beyond what the login form already reveals.
  */
 export async function GET(req: NextRequest) {
+  // The public base URL (proxy-aware) — the browser must be redirected to
+  // the real site, never the app's internal origin behind Railway's proxy.
+  const base = appBaseUrl(req);
   const loginRedirect = (error: string) => {
-    const res = NextResponse.redirect(new URL(`/login?error=${error}`, req.nextUrl.origin));
+    const res = NextResponse.redirect(new URL(`/login?error=${error}`, base));
     res.cookies.delete(GOOGLE_STATE_COOKIE);
     res.cookies.delete(GOOGLE_VERIFIER_COOKIE);
     return res;
@@ -43,7 +47,7 @@ export async function GET(req: NextRequest) {
   const identity = await resolveGoogleEmail({
     code,
     codeVerifier: verifier,
-    redirectUri: googleRedirectUri(req.nextUrl.origin),
+    redirectUri: googleRedirectUri(base),
   });
   if (!identity) return loginRedirect("google_failed");
   if (!identity.emailVerified) return loginRedirect("google_failed");
@@ -51,7 +55,7 @@ export async function GET(req: NextRequest) {
   const userAuth = getUserAuthByEmail(identity.email);
   if (!userAuth) return loginRedirect("not_member");
 
-  const res = NextResponse.redirect(new URL("/", req.nextUrl.origin));
+  const res = NextResponse.redirect(new URL("/", base));
   res.cookies.delete(GOOGLE_STATE_COOKIE);
   res.cookies.delete(GOOGLE_VERIFIER_COOKIE);
   const { token } = createSession(userAuth.id);
