@@ -1025,6 +1025,30 @@ th.num.sortable button {
   background: var(--surface);
 }
 
+/* "or" separator between password form and Google button (v3.6). */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.auth-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
 .auth-card h1 {
   margin: 0;
 }

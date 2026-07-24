@@ -39,6 +39,35 @@ already have a Railway account and this repo pushed to GitHub.
   recreates demo users with public, well-known passwords. It's a local
   dev convenience only.
 
+## Google sign-in (optional, v3.6)
+
+Adds a "Sign in with Google" button to the login page. Password login
+keeps working unchanged — this is additive, and the button only appears
+when credentials are configured.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) create
+   (or pick) a project → **APIs & Services → OAuth consent screen**:
+   User type **External**, fill in the app name + your email, add no
+   scopes beyond the defaults, and add your teammates as test users —
+   or click **Publish app** so any Google account can attempt sign-in
+   (membership is still enforced by Open-Time; unknown emails are
+   refused).
+2. **APIs & Services → Credentials → Create credentials → OAuth client
+   ID**, type **Web application**. Authorized redirect URIs:
+   - `https://time.reposcout.com/api/auth/google/callback`
+   - `http://localhost:3000/api/auth/google/callback` (for local dev)
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on the Railway
+   service (and in a local `.env.local` for dev). Redeploy.
+
+Notes:
+- A Google login must match an existing member's email exactly
+  (case-insensitive) — there is no self-registration. Members whose
+  Google address differs from their Open-Time email should keep using
+  their password until an admin updates their record.
+- If the deploy sits behind a proxy whose request origin isn't the
+  public URL, set `OPENTIME_BASE_URL=https://time.reposcout.com` so the
+  callback URL sent to Google matches the one registered.
+
 ## Operations
 
 - **Run exactly 1 replica.** SQLite is single-writer; horizontal scaling

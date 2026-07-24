@@ -80,6 +80,11 @@ export function me(): Promise<User | null> {
   return request<User | null>("/api/auth/me");
 }
 
+/** Which sign-in methods this deployment offers (v3.6) — drives the login page's Google button. */
+export function getAuthProviders(): Promise<{ google: boolean }> {
+  return request<{ google: boolean }>("/api/auth/providers");
+}
+
 // ---------- users ----------
 
 /** `includeRemoved` surfaces soft-removed members too (flagged via `deletedAt`) — see the Team page's "Show removed" toggle. */
