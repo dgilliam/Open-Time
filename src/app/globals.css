@@ -302,8 +302,11 @@ h2 {
   width: 100%;
   padding: 2rem;
   /* Wide enough that the admin tables fit a big monitor without a
-     side-scroll (v3.5.1); small screens are governed by the viewport. */
+     side-scroll (v3.5.1); small screens are governed by the viewport.
+     margin-inline centers the capped column in the space beside the
+     sidebar instead of leaving all the slack on the right. */
   max-width: 1600px;
+  margin-inline: auto;
 }
 
 @media (max-width: 639px) {
