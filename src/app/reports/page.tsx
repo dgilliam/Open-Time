@@ -264,7 +264,7 @@ export default function ReportsPage() {
                 {sortedGroups.map((g) => (
                   <tr key={g.id}>
                     {groupBy === "task" ? (
-                      <td className="mono">
+                      <td className="mono cell-wrap">
                         <button
                           type="button"
                           className="task-name-link"
@@ -307,7 +307,7 @@ export default function ReportsPage() {
                     )}
                     {groupBy === "user" && <td className="muted">{g.project ?? "—"}</td>}
                     {groupBy === "task" ? (
-                      <td className="muted">{formatReportDates(g.dates)}</td>
+                      <td className="muted cell-wrap">{formatReportDates(g.dates)}</td>
                     ) : (
                       <td className="num">{g.taskCount ?? 0}</td>
                     )}

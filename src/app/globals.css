@@ -301,7 +301,9 @@ h2 {
   min-width: 0;
   width: 100%;
   padding: 2rem;
-  max-width: 1100px;
+  /* Wide enough that the admin tables fit a big monitor without a
+     side-scroll (v3.5.1); small screens are governed by the viewport. */
+  max-width: 1600px;
 }
 
 @media (max-width: 639px) {
@@ -655,6 +657,15 @@ td {
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* Text-heavy cells (free-text task names, contributor lists, worked-date
+   lists) wrap instead of forcing the whole table into a side-scroll
+   (v3.5.1). Applied per-cell so date/time/number columns keep nowrap. */
+td.cell-wrap,
+td.cell-wrap .task-name-link {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 th {

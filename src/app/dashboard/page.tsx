@@ -394,7 +394,7 @@ export default function DashboardPage() {
                 <tbody>
                   {taskSort.sorted.map((g) => (
                     <tr key={g.id}>
-                      <td className="mono">
+                      <td className="mono cell-wrap">
                         <button
                           type="button"
                           className="task-name-link"
@@ -423,12 +423,12 @@ export default function DashboardPage() {
                         )}
                       </td>
                       <td className="num">{hoursLabel(g.hours * 3600)}</td>
-                      <td className="muted">
+                      <td className="muted cell-wrap">
                         {(g.contributors ?? [])
                           .map((c) => `${c.name} ${hoursLabel(c.hours * 3600)}`)
                           .join(", ") || "—"}
                       </td>
-                      <td className="muted">{formatReportDates(g.dates)}</td>
+                      <td className="muted cell-wrap">{formatReportDates(g.dates)}</td>
                       <td>
                         <StatusBadge
                           status={g.status ?? "open"}
@@ -515,7 +515,7 @@ export default function DashboardPage() {
                     <tr key={entry.id}>
                       <td>{entry.userName}</td>
                       <td className="muted">{entry.userProject ?? "—"}</td>
-                      <td className="mono">
+                      <td className="mono cell-wrap">
                         <button
                           type="button"
                           className="task-name-link"
