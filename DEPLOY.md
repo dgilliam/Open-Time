@@ -64,6 +64,14 @@ Notes:
   (case-insensitive) — there is no self-registration. Members whose
   Google address differs from their Open-Time email should keep using
   their password until an admin updates their record.
+- **Auto-provisioning (optional, v3.7):** set
+  `GOOGLE_AUTO_PROVISION_DOMAINS` to a comma-separated list of email
+  domains (e.g. `reposcout.com,gilli.am`) and a verified Google sign-in
+  from one of those domains that matches no member creates a member
+  record on first sign-in (role `member`, name from the Google profile,
+  unusable random password — Google is their login). Unset = off.
+  Removed members are never resurrected this way; restoring them stays
+  an admin action on the Team page.
 - If the deploy sits behind a proxy whose request origin isn't the
   public URL, set `OPENTIME_BASE_URL=https://time.reposcout.com` so the
   callback URL sent to Google matches the one registered.

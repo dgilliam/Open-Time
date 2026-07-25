@@ -220,6 +220,95 @@ describe("GET /api/auth/google/callback", () => {
   });
 });
 
+describe("auto-provisioning (v3.7, GOOGLE_AUTO_PROVISION_DOMAINS)", () => {
+  const withDomains = async (domains: string, fn: () => Promise<void>) => {
+    process.env.GOOGLE_AUTO_PROVISION_DOMAINS = domains;
+    try {
+      await fn();
+    } finally {
+      delete process.env.GOOGLE_AUTO_PROVISION_DOMAINS;
+    }
+  };
+
+  // Stub name is not sent, so the callback derives it from the email local
+  // part unless a test sets one via the userinfo payload.
+  it("creates a member on first sign-in from an allow-listed domain", async () => {
+    await withDomains("reposcout.com, gilli.am", async () => {
+      stub = { email: "newbie@gilli.am", emailVerified: true };
+      const res = await callbackRoute.GET(
+        callbackReq({ code: "c1", state: "s1", cookieState: "s1", verifier: "v1" })
+      );
+      expect(location(res)).toBe("http://localhost/");
+      const token = sessionTokenFrom(res);
+      const user = auth.getSessionUser(token)!;
+      expect(user.email).toBe("newbie@gilli.am");
+      expect(user.role).toBe("member");
+      expect(user.name).toBe("newbie"); // no Google name in the stub → local part
+    });
+  });
+
+  it("second sign-in reuses the same member (no duplicate)", async () => {
+    await withDomains("gilli.am", async () => {
+      stub = { email: "repeat@gilli.am", emailVerified: true };
+      const first = await callbackRoute.GET(
+        callbackReq({ code: "c1", state: "s1", cookieState: "s1", verifier: "v1" })
+      );
+      const firstUser = auth.getSessionUser(sessionTokenFrom(first))!;
+      const second = await callbackRoute.GET(
+        callbackReq({ code: "c2", state: "s2", cookieState: "s2", verifier: "v2" })
+      );
+      const secondUser = auth.getSessionUser(sessionTokenFrom(second))!;
+      expect(secondUser.id).toBe(firstUser.id);
+      expect(db.prepare("SELECT COUNT(*) as n FROM users WHERE email = 'repeat@gilli.am'").get()).toEqual({
+        n: 1,
+      });
+    });
+  });
+
+  it("still refuses domains outside the allow-list", async () => {
+    await withDomains("reposcout.com", async () => {
+      stub = { email: "stranger@gmail.com", emailVerified: true };
+      const res = await callbackRoute.GET(
+        callbackReq({ code: "c1", state: "s1", cookieState: "s1", verifier: "v1" })
+      );
+      expect(location(res)).toContain("/login?error=not_member");
+      expect(sessionTokenFrom(res)).toBeNull();
+    });
+  });
+
+  it("cannot resurrect a removed member (offboarding stays authoritative)", async () => {
+    const admin = repo.createUser({
+      name: "Admin",
+      email: "admin@reposcout.dev",
+      password: "opentime-dev",
+      role: "admin",
+    });
+    repo.removeUser(member.id, admin.id); // grace@reposcout.dev
+    await withDomains("reposcout.dev", async () => {
+      stub = { email: "grace@reposcout.dev", emailVerified: true };
+      const res = await callbackRoute.GET(
+        callbackReq({ code: "c1", state: "s1", cookieState: "s1", verifier: "v1" })
+      );
+      expect(location(res)).toContain("/login?error=not_member");
+      expect(sessionTokenFrom(res)).toBeNull();
+      // Still exactly one (removed) row for that email.
+      const row = db.prepare("SELECT deleted_at FROM users WHERE email = 'grace@reposcout.dev'").get() as {
+        deleted_at: string | null;
+      };
+      expect(row.deleted_at).not.toBeNull();
+    });
+  });
+
+  it("does nothing when the env var is unset (default off)", async () => {
+    stub = { email: "newbie@gilli.am", emailVerified: true };
+    const res = await callbackRoute.GET(
+      callbackReq({ code: "c1", state: "s1", cookieState: "s1", verifier: "v1" })
+    );
+    expect(location(res)).toContain("/login?error=not_member");
+    expect(sessionTokenFrom(res)).toBeNull();
+  });
+});
+
 describe("GET /api/auth/providers", () => {
   it("reports google availability from env", async () => {
     const res = await providersRoute.GET();

@@ -33,6 +33,20 @@ export function googleEnabled(): boolean {
 }
 
 /**
+ * Auto-provisioning allow-list (v3.7): GOOGLE_AUTO_PROVISION_DOMAINS is a
+ * comma-separated list of email domains (e.g. "reposcout.com,gilli.am").
+ * A verified Google sign-in from one of these domains that matches no
+ * member creates a member record on the spot. Empty/unset = off, and
+ * membership stays strictly pre-created.
+ */
+export function autoProvisionDomains(): string[] {
+  return (process.env.GOOGLE_AUTO_PROVISION_DOMAINS ?? "")
+    .split(",")
+    .map((d) => d.trim().toLowerCase().replace(/^@/, ""))
+    .filter(Boolean);
+}
+
+/**
  * The app's public base URL as the BROWSER sees it — required for the
  * redirect URI sent to Google and for the OAuth routes' own redirects.
  * Behind a reverse proxy (Railway), req.nextUrl.origin is the app's
@@ -75,7 +89,7 @@ export async function resolveGoogleEmail(input: {
   code: string;
   codeVerifier: string;
   redirectUri: string;
-}): Promise<{ email: string; emailVerified: boolean } | null> {
+}): Promise<{ email: string; emailVerified: boolean; name: string | null } | null> {
   try {
     const tokenRes = await fetch(googleTokenUrl(), {
       method: "POST",
@@ -97,9 +111,13 @@ export async function resolveGoogleEmail(input: {
       headers: { authorization: `Bearer ${tokenJson.access_token}` },
     });
     if (!infoRes.ok) return null;
-    const info = (await infoRes.json()) as { email?: string; email_verified?: boolean };
+    const info = (await infoRes.json()) as { email?: string; email_verified?: boolean; name?: string };
     if (!info.email) return null;
-    return { email: info.email, emailVerified: info.email_verified === true };
+    return {
+      email: info.email,
+      emailVerified: info.email_verified === true,
+      name: typeof info.name === "string" && info.name.trim() ? info.name.trim() : null,
+    };
   } catch {
     return null;
   }

@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID ?? "");
   url.searchParams.set("redirect_uri", googleRedirectUri(base));
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "openid email");
+  // profile is included for the display name used by auto-provisioning
+  // (v3.7); without it Google's userinfo returns only the email.
+  url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge", pkceChallenge(verifier));
   url.searchParams.set("code_challenge_method", "S256");
