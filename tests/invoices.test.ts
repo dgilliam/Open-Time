@@ -123,7 +123,9 @@ describe("createMissingPeriods — bootstrap", () => {
     const created = invoices.createMissingPeriods(new Date("2026-01-06T00:00:00.000Z"));
     expect(created.length).toBe(1);
     expect(created[0].label).toBe("2026-01-04");
-    expect(created[0].locked).toBe(true);
+    // v3.8: the newest period is born LIVE; it locks at the next weekly
+    // rollover or when the admin locks it.
+    expect(created[0].locked).toBe(false);
 
     const periods = invoices.listInvoicePeriods();
     expect(periods.length).toBe(1);
@@ -215,13 +217,14 @@ describe("createMissingPeriods — incremental multi-week catch-up", () => {
     expect(byTask("AB8-current-week").invoicePeriodId).toBeNull();
   });
 
-  it("a late-logged entry (backdated into an already-invoiced week) lands in the NEXT period created, not the one matching its date", () => {
+  it("a late-logged entry is absorbed by the newest LIVE period on the next sweep (v3.8)", () => {
     seedExistingPeriod();
-    invoices.createMissingPeriods(new Date("2026-01-27T00:00:00.000Z")); // creates Jan-11/18/25 periods
+    invoices.createMissingPeriods(new Date("2026-01-27T00:00:00.000Z")); // Jan-11/18 auto-lock; Jan-25 live
 
-    // Backdated into the Jan5-11 week, but logged only now — after that
-    // period already closed. It must not vanish, and must not retroactively
-    // land in the Jan-11 period either.
+    // Backdated into the Jan5-11 week but logged only now. Jan-11 is locked
+    // (billed), so it must NOT retroactively join it — but the still-live
+    // Jan-25 period absorbs it on the next sweep instead of it waiting a
+    // whole extra week.
     const late = repo.createEntry({
       userId: member.id,
       task: "ab9-late-logged",
@@ -230,22 +233,71 @@ describe("createMissingPeriods — incremental multi-week catch-up", () => {
     });
     expect(late.invoicePeriodId).toBeNull();
 
-    // Not yet past the next (Feb-1) cutoff — still unswept.
+    invoices.createMissingPeriods(new Date("2026-01-28T00:00:00.000Z")); // no new period; resweep runs
+    const jan25 = invoices.listInvoicePeriods().find((p) => p.label === "2026-01-25")!;
+    const jan11 = invoices.listInvoicePeriods().find((p) => p.label === "2026-01-11")!;
+    expect(jan25.locked).toBe(false);
+    expect(jan11.locked).toBe(true);
+    expect(repo.getEntry(late.id)!.invoicePeriodId).toBe(jan25.id);
+  });
+
+  it("with every period locked, a late entry waits for the NEXT period (v2.8 roll-forward preserved)", () => {
+    seedExistingPeriod();
+    invoices.createMissingPeriods(new Date("2026-01-27T00:00:00.000Z"));
+    const jan25 = invoices.listInvoicePeriods().find((p) => p.label === "2026-01-25")!;
+    invoices.setInvoicePeriodLocked(jan25.id, true); // admin exported + locked
+
+    const late = repo.createEntry({
+      userId: member.id,
+      task: "ab9b-late-after-lock",
+      startedAt: "2026-01-08T14:00:00.000Z",
+      stoppedAt: "2026-01-08T15:00:00.000Z",
+    });
+
+    // Everything locked → stays uninvoiced through mid-week sweeps…
     invoices.createMissingPeriods(new Date("2026-01-28T00:00:00.000Z"));
     expect(repo.getEntry(late.id)!.invoicePeriodId).toBeNull();
 
-    // Now past the Feb-1 cutoff (2026-02-02T07:59:00.000Z PST): the late
-    // entry sweeps into THAT period.
+    // …then the Feb-1 period (created live) claims it.
     const created = invoices.createMissingPeriods(new Date("2026-02-03T00:00:00.000Z"));
     const febPeriod = created.find((p) => p.label === "2026-02-01")!;
-    expect(febPeriod).toBeTruthy();
     expect(repo.getEntry(late.id)!.invoicePeriodId).toBe(febPeriod.id);
-
-    const jan11Period = invoices.listInvoicePeriods().find((p) => p.label === "2026-01-11")!;
-    expect(repo.getEntry(late.id)!.invoicePeriodId).not.toBe(jan11Period.id);
   });
 
-  it("a running entry at cutoff time is excluded, then swept once stopped", () => {
+  it("weekly rollover auto-locks the previous live period (v3.8)", () => {
+    seedExistingPeriod();
+    invoices.createMissingPeriods(new Date("2026-01-13T00:00:00.000Z")); // Jan-11 live
+    expect(invoices.listInvoicePeriods().find((p) => p.label === "2026-01-11")!.locked).toBe(false);
+
+    invoices.createMissingPeriods(new Date("2026-01-20T00:00:00.000Z")); // Jan-18 created
+    expect(invoices.listInvoicePeriods().find((p) => p.label === "2026-01-11")!.locked).toBe(true);
+    expect(invoices.listInvoicePeriods().find((p) => p.label === "2026-01-18")!.locked).toBe(false);
+  });
+
+  it("an entry edited to start past the cutoff is released from the live period (v3.8)", () => {
+    seedExistingPeriod();
+    const entry = repo.createEntry({
+      userId: member.id,
+      task: "ab9c-moved-forward",
+      startedAt: "2026-01-08T09:00:00.000Z",
+      stoppedAt: "2026-01-08T10:00:00.000Z",
+    });
+    invoices.createMissingPeriods(new Date("2026-01-13T00:00:00.000Z")); // Jan-11 live, claims it
+    const jan11 = invoices.listInvoicePeriods().find((p) => p.label === "2026-01-11")!;
+    expect(repo.getEntry(entry.id)!.invoicePeriodId).toBe(jan11.id);
+
+    // Admin corrects the date into the following week; the live period lets
+    // it go on the next sweep instead of billing it under the wrong week.
+    repo.updateEntry(
+      entry.id,
+      { startedAt: "2026-01-14T09:00:00.000Z", stoppedAt: "2026-01-14T10:00:00.000Z" },
+      { id: admin.id, role: "admin" }
+    );
+    invoices.createMissingPeriods(new Date("2026-01-13T12:00:00.000Z"));
+    expect(repo.getEntry(entry.id)!.invoicePeriodId).toBeNull();
+  });
+
+  it("a running entry at cutoff time is excluded, then absorbed by its week's still-live period once stopped (v3.8)", () => {
     seedExistingPeriod();
 
     const running = repo.startTimer({ userId: member.id, task: "ab10-still-running" });
@@ -261,12 +313,14 @@ describe("createMissingPeriods — incremental multi-week catch-up", () => {
     expect(repo.getEntry(running.id)!.invoicePeriodId).toBeNull(); // still running — excluded
 
     repo.stopTimer({ userId: member.id });
-    // Still not past the next cutoff yet — remains unswept immediately after stopping.
+    // No sweep has run since stopping — still unassigned.
     expect(repo.getEntry(running.id)!.invoicePeriodId).toBeNull();
 
-    const created = invoices.createMissingPeriods(new Date("2026-01-20T00:00:00.000Z")); // past Jan-18 cutoff
-    const jan18Period = created.find((p) => p.label === "2026-01-18")!;
-    expect(repo.getEntry(running.id)!.invoicePeriodId).toBe(jan18Period.id);
+    // v3.8: the Jan-11 period is still LIVE, so the next sweep books the
+    // stopped entry into the week it was actually worked — not a week late.
+    invoices.createMissingPeriods(new Date("2026-01-13T12:00:00.000Z"));
+    const jan11Period = invoices.listInvoicePeriods().find((p) => p.label === "2026-01-11")!;
+    expect(repo.getEntry(running.id)!.invoicePeriodId).toBe(jan11Period.id);
   });
 });
 
@@ -279,8 +333,10 @@ describe("locking — updateEntry/deleteEntry/setTimesheetCell", () => {
       stoppedAt: "2026-01-01T10:00:00.000Z",
     });
     const created = invoices.createMissingPeriods(new Date("2026-01-06T00:00:00.000Z"));
-    const period = created[0];
-    expect(period).toBeTruthy();
+    expect(created[0]).toBeTruthy();
+    // v3.8: periods are born live — the admin locks at export (or the next
+    // rollover does). These tests exercise the LOCKED state explicitly.
+    const period = invoices.setInvoicePeriodLocked(created[0].id, true);
     expect(period.locked).toBe(true);
     return { entryId: entry.id, periodId: period.id };
   }
@@ -357,17 +413,31 @@ describe("locking — updateEntry/deleteEntry/setTimesheetCell", () => {
     );
   });
 
-  it("unlocking does NOT detach entries — a re-run of createMissingPeriods after unlock doesn't re-sweep or double-bill", () => {
+  it("unlocking keeps existing entries attached and absorbs uninvoiced stragglers — never steals from other periods (v3.8)", () => {
     const { entryId, periodId } = seedLockedEntry();
+
+    // A straggler from that same week, logged after the period locked.
+    const straggler = repo.createEntry({
+      userId: member.id,
+      task: "ab12-straggler",
+      startedAt: "2026-01-02T09:00:00.000Z",
+      stoppedAt: "2026-01-02T10:00:00.000Z",
+    });
+    expect(straggler.invoicePeriodId).toBeNull();
+
     invoices.setInvoicePeriodLocked(periodId, false);
 
+    // Original entry untouched; the straggler was absorbed immediately.
     expect(repo.getEntry(entryId)!.invoicePeriodId).toBe(periodId);
+    expect(repo.getEntry(straggler.id)!.invoicePeriodId).toBe(periodId);
 
+    // And a re-run creates nothing new / moves nothing between periods.
     const before = invoices.listInvoicePeriods().length;
     const created = invoices.createMissingPeriods(new Date("2026-01-06T00:00:00.000Z"));
-    expect(created.length).toBe(0); // no re-sweep, no new period
+    expect(created.length).toBe(0);
     expect(invoices.listInvoicePeriods().length).toBe(before);
-    expect(repo.getEntry(entryId)!.invoicePeriodId).toBe(periodId); // still attached, unchanged
+    expect(repo.getEntry(entryId)!.invoicePeriodId).toBe(periodId);
+    expect(repo.getEntry(straggler.id)!.invoicePeriodId).toBe(periodId);
   });
 });
 

@@ -110,7 +110,7 @@ export default function InvoicesPage() {
       const weekEndingDate = formatShortDate(parseLocalDate(period.label));
       if (
         !confirm(
-          `Unlock week ending ${weekEndingDate}? Members will be able to edit these entries until you relock.`
+          `Unlock week ending ${weekEndingDate}? The period goes live again: members can edit these entries and any uninvoiced backfills for this week are absorbed, until you lock it (or next week's rollover locks it for you).`
         )
       ) {
         return;
@@ -214,7 +214,12 @@ export default function InvoicesPage() {
                     <span className="muted">{hoursLabel(period.totalHours * 3600)}</span>
                     <span className="muted">{pluralCount(period.memberCount, "member")}</span>
                     {!period.locked && (
-                      <span className="status-badge status-badge-submitted">Unlocked</span>
+                      <span
+                        className="status-badge status-badge-accepted"
+                        title="Updates as the team backfills. Locks when you click Lock, or automatically when next week's period is created."
+                      >
+                        Live
+                      </span>
                     )}
                     <span className="invoice-period-actions" onClick={(e) => e.stopPropagation()}>
                       <a className="btn" href={invoiceCsvUrl(period.id)}>
@@ -226,7 +231,7 @@ export default function InvoicesPage() {
                         disabled={lockBusyId === period.id}
                         onClick={() => handleToggleLock(period)}
                       >
-                        {period.locked ? "Unlock" : "Relock"}
+                        {period.locked ? "Unlock" : "Lock"}
                       </button>
                     </span>
                   </div>

@@ -599,6 +599,30 @@ Execution: T27 = Week page core (columns, cards, totals, timer
 integration, drawers, locking). T28 = Month toggle, retirements,
 redirects, nav, README sync.
 
+## v3.8 — Live invoice periods (2026-07-27)
+
+Founder feedback: the Monday-morning invoice period didn't match the
+dashboard's week because backfills after the Sunday cutoff rolled to
+the next period (v2.8 froze membership at sweep time). Change: periods
+are **live until locked**.
+
+- Periods are created UNLOCKED. While unlocked, re-sweeps (hourly, on
+  Invoices page load, and on unlock) release entries edited past the
+  cutoff and claim uninvoiced completed entries started before it — so
+  a live period tracks the dashboard as the team backfills.
+- **Lock is the freeze point** (the billing event). Locked membership
+  never changes; member edits 403 as before. Claims only ever touch
+  UNASSIGNED entries, so hours move between "uninvoiced" and one live
+  period — never between two periods. No double-billing, unchanged.
+- **Auto-lock at weekly rollover**: when a new week's period is
+  created, all older live periods lock. Forgetting to lock manually
+  therefore costs nothing; the export the admin billed from can drift
+  only while its week's period is deliberately left live.
+- Unlock now re-opens absorption (supersedes v2.8's "unlock never
+  re-sweeps"); it still never detaches or steals assigned entries.
+- Admin flow: Monday — open Invoices (page load re-sweeps), Export
+  CSV, Lock.
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old

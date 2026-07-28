@@ -183,11 +183,13 @@ function getPeriodRow(id: string): PeriodRow | undefined {
 /**
  * Creates one invoice period for `label`/`cutoffAt` and assigns every
  * completed entry that isn't yet invoiced (`invoice_period_id IS NULL`) and
- * started before the cutoff. Transactional. The label is UNIQUE, so a
- * concurrent duplicate attempt (two processes racing the same missing week)
- * throws a SQLite "UNIQUE constraint failed" error, which is swallowed here
- * — the period already exists, which is all we need (same pattern as
- * db.ts's addColumnIfMissing).
+ * started before the cutoff. Since v3.8 periods are created LIVE (unlocked):
+ * membership keeps updating via re-sweeps until the period locks — see
+ * createMissingPeriods for the lifecycle. Transactional. The label is
+ * UNIQUE, so a concurrent duplicate attempt (two processes racing the same
+ * missing week) throws a SQLite "UNIQUE constraint failed" error, which is
+ * swallowed here — the period already exists, which is all we need (same
+ * pattern as db.ts's addColumnIfMissing).
  */
 function tryCreatePeriod(label: string, cutoffAt: Date): InvoicePeriod | null {
   try {
@@ -195,7 +197,7 @@ function tryCreatePeriod(label: string, cutoffAt: Date): InvoicePeriod | null {
       const id = randomUUID();
       const createdAt = new Date().toISOString();
       db.prepare(
-        "INSERT INTO invoice_periods (id, label, cutoff_at, locked, created_at) VALUES (?, ?, ?, 1, ?)"
+        "INSERT INTO invoice_periods (id, label, cutoff_at, locked, created_at) VALUES (?, ?, ?, 0, ?)"
       ).run(id, label, cutoffAt.toISOString(), createdAt);
       db.prepare(
         `UPDATE time_entries
@@ -212,6 +214,41 @@ function tryCreatePeriod(label: string, cutoffAt: Date): InvoicePeriod | null {
 }
 
 /**
+ * Re-sweeps one LIVE period (v3.8): first releases entries whose start was
+ * edited past the cutoff (they no longer belong), then claims every
+ * uninvoiced completed entry started before it. Claims touch only
+ * unassigned entries — membership of every other period is never altered,
+ * so re-sweeping can shift hours between "uninvoiced" and ONE live period,
+ * never between two periods (no double-billing, same invariant as v2.8).
+ */
+function resweepLivePeriod(periodId: string, cutoffAtIso: string): void {
+  db.prepare(
+    `UPDATE time_entries SET invoice_period_id = NULL
+     WHERE invoice_period_id = ? AND started_at >= ?`
+  ).run(periodId, cutoffAtIso);
+  db.prepare(
+    `UPDATE time_entries SET invoice_period_id = ?
+     WHERE invoice_period_id IS NULL AND stopped_at IS NOT NULL AND started_at < ?`
+  ).run(periodId, cutoffAtIso);
+}
+
+/**
+ * Re-sweeps every LIVE (unlocked) period, oldest first, so backfilled or
+ * late-stopped hours land in the week they were worked for as long as that
+ * week's period hasn't been locked. Runs on the hourly sweep and whenever
+ * the Invoices page loads; a no-op when everything is locked.
+ */
+export function resweepLivePeriods(): void {
+  const txn = db.transaction(() => {
+    const rows = db
+      .prepare("SELECT * FROM invoice_periods WHERE locked = 0 ORDER BY cutoff_at ASC")
+      .all() as PeriodRow[];
+    for (const row of rows) resweepLivePeriod(row.id, row.cutoff_at);
+  });
+  txn();
+}
+
+/**
  * Computes every Sunday-23:59-PT cutoff that's missing a period, up to
  * `now`, and creates them in order (oldest first) so each period's sweep
  * only picks up entries not already claimed by an earlier one. Bootstrap
@@ -219,8 +256,19 @@ function tryCreatePeriod(label: string, cutoffAt: Date): InvoicePeriod | null {
  * sweeping ALL prior uninvoiced completed entries in one shot. Idempotent —
  * safe to call on every boot and hourly thereafter; a second call with
  * nothing new to do creates nothing.
+ *
+ * v3.8 period lifecycle: periods are created LIVE and keep absorbing
+ * backfills via resweepLivePeriods (run here first, so a period about to be
+ * superseded gets its final claim). When a new week's period is created,
+ * every older live period auto-locks — the previous week had a full week of
+ * liveness, and freezing it then is what keeps already-billed weeks stable.
+ * The admin can lock earlier (freezing the invoice at export time) or
+ * unlock to re-open absorption; an admin-unlocked period stays live until
+ * the next weekly rollover re-locks it.
  */
 export function createMissingPeriods(now: Date = new Date()): InvoicePeriod[] {
+  resweepLivePeriods();
+
   const created: InvoicePeriod[] = [];
   const latest = db
     .prepare("SELECT * FROM invoice_periods ORDER BY cutoff_at DESC LIMIT 1")
@@ -244,6 +292,14 @@ export function createMissingPeriods(now: Date = new Date()): InvoicePeriod[] {
     const period = tryCreatePeriod(label, cutoffAt);
     if (period) created.push(period);
   }
+
+  // Weekly rollover auto-lock: only the newest period stays live.
+  if (created.length > 0) {
+    db.prepare(
+      `UPDATE invoice_periods SET locked = 1
+       WHERE locked = 0 AND cutoff_at < (SELECT MAX(cutoff_at) FROM invoice_periods)`
+    ).run();
+  }
   return created;
 }
 
@@ -266,11 +322,19 @@ export function assertEntryEditable(
   if (row?.locked) throw new ApiError(403, "already invoiced");
 }
 
-/** Admin-only: flips a period's locked flag. Unlocking never detaches entries — no re-sweep, no double-billing. */
+/**
+ * Admin-only: flips a period's locked flag. Unlocking (v3.8) re-opens the
+ * period as live: it immediately absorbs any uninvoiced stragglers started
+ * before its cutoff and keeps re-sweeping until relocked (or auto-locked at
+ * the next weekly rollover). Entries already assigned to OTHER periods are
+ * never moved — unlock can pull hours in from "uninvoiced", never steal
+ * them from another invoice, so double-billing stays impossible.
+ */
 export function setInvoicePeriodLocked(id: string, locked: boolean): InvoicePeriod {
   const existing = getPeriodRow(id);
   if (!existing) throw new ApiError(404, "invoice period not found");
   db.prepare("UPDATE invoice_periods SET locked = ? WHERE id = ?").run(locked ? 1 : 0, id);
+  if (!locked) resweepLivePeriods();
   return rowToPeriod(getPeriodRow(id)!);
 }
 
