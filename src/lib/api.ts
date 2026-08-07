@@ -224,6 +224,25 @@ export function getReport(opts: {
  * this directly as its href so the session cookie rides along with the
  * browser-initiated download.
  */
+// ---------- daily digest (v3.9 prototype, admin only) ----------
+
+export interface DigestPreview {
+  digest: {
+    date: string;
+    totalHours: number;
+    members: { id: string; name: string; hours: number; tasks: { task: string; hours: number }[] }[];
+    noHours: string[];
+  };
+  slackText: string;
+}
+
+/** Admin-only: the daily digest for a date, rendered but never sent. */
+export function getDigestPreview(date: string): Promise<DigestPreview> {
+  const params = new URLSearchParams({ date });
+  if (BROWSER_TZ) params.set("tz", BROWSER_TZ);
+  return request<DigestPreview>(`/api/digest/preview?${params.toString()}`);
+}
+
 export function reportsCsvUrl(opts: {
   userId?: string;
   from: string;
