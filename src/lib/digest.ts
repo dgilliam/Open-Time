@@ -1,9 +1,15 @@
-// Daily digest (v3.9 prototype): who logged hours yesterday, how many, on
-// what. This module only BUILDS and RENDERS the digest — nothing here sends
-// anything. The admin previews it on the Dashboard; the Slack delivery +
-// scheduler come later, once the format is signed off (docs/PLAN.md).
+// Daily digest (v3.9): who logged hours yesterday, how many, on what.
+//
+// Three layers, kept separate on purpose: buildDailyDigest aggregates,
+// renderDigestSlackText formats (the Dashboard preview renders exactly this
+// text, so the preview IS the contract), and the delivery section at the
+// bottom posts it to Slack — idempotently, via the notifications_log
+// ledger. Delivery is inert unless SLACK_BOT_TOKEN + SLACK_DIGEST_CHANNEL
+// are configured, so the preview works on any deployment.
 
+import { db } from "./db";
 import { listEntries, listUsers, zoneDateKey } from "./repo";
+import { postSlackMessage, slackEnabled } from "./slack";
 
 export interface DigestTaskLine {
   task: string;
@@ -135,4 +141,102 @@ export function renderDigestSlackText(d: DailyDigest, opts: { tasks?: boolean } 
     lines.push(`_No hours: ${d.noHours.join(", ")}_`);
   }
   return lines.join("\n");
+}
+
+// ---------- delivery (v3.9) ----------
+
+const DIGEST_KIND = "daily_digest";
+
+/** The team's timezone for digest scheduling and day boundaries. */
+export function digestTimeZone(): string {
+  return process.env.OPENTIME_TZ || "America/Chicago";
+}
+
+/** Local hour (0-23) of `now` in the digest timezone. */
+function hourInZone(now: Date, timeZone: string): number {
+  return Number(
+    new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(now)
+  );
+}
+
+/** YYYY-MM-DD of the day BEFORE `now` in the digest timezone — what a morning digest covers. */
+export function digestTargetDate(now: Date, timeZone: string): string {
+  return zoneDateKey(new Date(now.getTime() - 86_400_000).toISOString(), timeZone);
+}
+
+function alreadySent(key: string): boolean {
+  return Boolean(
+    db.prepare("SELECT 1 FROM notifications_log WHERE kind = ? AND key = ?").get(DIGEST_KIND, key)
+  );
+}
+
+/** Records a delivery; returns false if another process won the race (PK conflict). */
+function recordSent(key: string): boolean {
+  const res = db
+    .prepare("INSERT OR IGNORE INTO notifications_log (kind, key, sent_at) VALUES (?, ?, ?)")
+    .run(DIGEST_KIND, key, new Date().toISOString());
+  return res.changes > 0;
+}
+
+export interface DigestSendResult {
+  status: "sent" | "skipped" | "failed";
+  /** Why it was skipped/failed — surfaced to the admin, logged by the scheduler. */
+  reason?: string;
+  date?: string;
+  text?: string;
+}
+
+/**
+ * Builds and posts one day's digest to Slack. Idempotent by (kind, date):
+ * the ledger row is claimed BEFORE posting, so a duplicate tick or a second
+ * replica bails instead of double-posting. `force` re-posts a date that was
+ * already sent (the admin's "Send to Slack now" button) and skips the
+ * ledger claim.
+ *
+ * Quiet days are skipped by default — no "nobody logged anything" noise on
+ * weekends — unless the caller forces the send.
+ */
+export async function sendDailyDigest(
+  date: string,
+  opts: { force?: boolean; tz?: string } = {}
+): Promise<DigestSendResult> {
+  if (!slackEnabled()) return { status: "skipped", reason: "slack not configured", date };
+
+  const force = opts.force === true;
+  if (!force && alreadySent(date)) return { status: "skipped", reason: "already sent", date };
+
+  const digest = buildDailyDigest(date, opts.tz ?? digestTimeZone());
+  if (!force && digest.members.length === 0) {
+    // Claim the day anyway so a later tick doesn't re-evaluate it all day.
+    recordSent(date);
+    return { status: "skipped", reason: "no hours logged", date };
+  }
+
+  const text = renderDigestSlackText(digest, { tasks: process.env.OPENTIME_DIGEST_TASKS !== "0" });
+
+  // Claim first: losing the race means another process is posting this one.
+  if (!force && !recordSent(date)) return { status: "skipped", reason: "already sent", date };
+
+  const error = await postSlackMessage(process.env.SLACK_DIGEST_CHANNEL ?? "", text);
+  if (error) {
+    // Release the claim so the next tick can retry a transient failure.
+    if (!force) db.prepare("DELETE FROM notifications_log WHERE kind = ? AND key = ?").run(DIGEST_KIND, date);
+    return { status: "failed", reason: error, date, text };
+  }
+  if (force) recordSent(date);
+  return { status: "sent", date, text };
+}
+
+/**
+ * Scheduler entry point: posts yesterday's digest once the configured local
+ * hour has arrived (default 09:00 in OPENTIME_TZ). Safe to call hourly — the
+ * ledger makes repeats no-ops, and a missed window still fires later the
+ * same day.
+ */
+export async function runScheduledDigest(now: Date = new Date()): Promise<DigestSendResult> {
+  if (!slackEnabled()) return { status: "skipped", reason: "slack not configured" };
+  const tz = digestTimeZone();
+  const sendHour = Number(process.env.OPENTIME_DIGEST_HOUR ?? 9);
+  if (hourInZone(now, tz) < sendHour) return { status: "skipped", reason: "before send hour" };
+  return sendDailyDigest(digestTargetDate(now, tz), { tz });
 }

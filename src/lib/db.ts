@@ -94,6 +94,17 @@ CREATE TABLE IF NOT EXISTS invoice_periods (
   created_at TEXT NOT NULL
 );
 
+-- Sent-notification ledger (v3.9): one row per (kind, key) actually
+-- delivered, e.g. ('daily_digest', '2026-07-24'). The PRIMARY KEY is the
+-- idempotency guard — a restart, a second replica, or an extra scheduler
+-- tick can never post the same digest twice.
+CREATE TABLE IF NOT EXISTS notifications_log (
+  kind TEXT NOT NULL,
+  key TEXT NOT NULL,
+  sent_at TEXT NOT NULL,
+  PRIMARY KEY (kind, key)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
@@ -215,6 +226,40 @@ if (
   }, 30_000);
   invoiceTimer.unref?.();
   console.log("[invoices] scheduled invoice period sweep (first run in ~30s, then hourly)");
+}
+
+// ---------- daily Slack digest schedule (production only) ----------
+// Same shape as the two schedules above. runScheduledDigest is a no-op
+// until the configured local send hour has passed AND is idempotent per
+// day via notifications_log, so an hourly tick is the whole mechanism: a
+// missed window (restart, deploy) still posts later the same day, and
+// repeats can't double-post. Inert unless Slack is configured.
+const DIGEST_FLAG = "__opentimeDigestScheduled";
+if (
+  !isBuildPhase &&
+  process.env.NODE_ENV === "production" &&
+  process.env.OPENTIME_DIGEST !== "0" &&
+  process.env.SLACK_BOT_TOKEN &&
+  process.env.SLACK_DIGEST_CHANNEL &&
+  !(globalThis as Record<string, unknown>)[DIGEST_FLAG]
+) {
+  (globalThis as Record<string, unknown>)[DIGEST_FLAG] = true;
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  const runDigest = () => {
+    import("./digest")
+      .then(({ runScheduledDigest }) => runScheduledDigest())
+      .then((result) => {
+        if (result.status === "sent") console.log(`[digest] posted digest for ${result.date}`);
+        else if (result.status === "failed") console.error(`[digest] send failed: ${result.reason}`);
+      })
+      .catch((err) => console.error("[digest] scheduled digest failed:", err));
+  };
+  const digestTimer = setTimeout(() => {
+    runDigest();
+    setInterval(runDigest, ONE_HOUR_MS).unref?.();
+  }, 90_000);
+  digestTimer.unref?.();
+  console.log("[digest] scheduled daily Slack digest (hourly check, posts once per day)");
 }
 
 export default db;

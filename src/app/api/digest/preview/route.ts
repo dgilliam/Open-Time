@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { buildDailyDigest, renderDigestSlackText } from "@/lib/digest";
+import { slackEnabled } from "@/lib/slack";
 import { ApiError, apiErrorResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,8 @@ export async function GET(req: NextRequest) {
         digest,
         slackText: renderDigestSlackText(digest),
         slackTextTableOnly: renderDigestSlackText(digest, { tasks: false }),
+        // Drives the "Send to Slack now" button's availability.
+        slackConfigured: slackEnabled(),
       },
     });
   } catch (err) {

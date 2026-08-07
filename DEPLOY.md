@@ -76,6 +76,43 @@ Notes:
   public URL, set `OPENTIME_BASE_URL=https://time.reposcout.com` so the
   callback URL sent to Google matches the one registered.
 
+## Daily Slack digest (optional, v3.9)
+
+Posts yesterday's hours to a Slack channel each morning: a
+`| Member | Hours |` table, per-member task lines, and a "no hours"
+footer. Inert until configured — the Dashboard's preview works either
+way.
+
+1. Create a Slack app at https://api.slack.com/apps → **From scratch**,
+   pick your workspace.
+2. **OAuth & Permissions → Bot Token Scopes**: add `chat:write`.
+3. **Install to Workspace**, then copy the **Bot User OAuth Token**
+   (`xoxb-…`).
+4. Invite the bot to the target channel in Slack:
+   `/invite @Open-Time` — posting to a channel it isn't in fails with
+   `not_in_channel`.
+5. Set on the Railway service and redeploy:
+   - `SLACK_BOT_TOKEN=xoxb-…`
+   - `SLACK_DIGEST_CHANNEL=#time-tracking`
+
+Optional tuning:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENTIME_TZ` | `America/Chicago` | Timezone for day boundaries + send hour |
+| `OPENTIME_DIGEST_HOUR` | `9` | Local hour (0-23) after which the digest posts |
+| `OPENTIME_DIGEST_TASKS` | `1` | `0` = table only, no per-task lines |
+| `OPENTIME_DIGEST` | `1` | `0` = disable the scheduler entirely |
+
+Notes:
+- The scheduler checks hourly and posts once per day, guarded by a
+  `notifications_log` ledger — restarts, deploys, and extra ticks can't
+  double-post, and a missed window still posts later the same day.
+- Days with no hours logged are skipped silently (no weekend noise).
+- Admins can post any day on demand from the Dashboard's digest preview
+  ("Send to Slack now"), which always re-posts even if that day already
+  went out.
+
 ## Operations
 
 - **Run exactly 1 replica.** SQLite is single-writer; horizontal scaling

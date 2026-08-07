@@ -235,6 +235,7 @@ export interface DigestPreview {
   };
   slackText: string;
   slackTextTableOnly: string;
+  slackConfigured: boolean;
 }
 
 /** Admin-only: the daily digest for a date, rendered but never sent. */
@@ -242,6 +243,14 @@ export function getDigestPreview(date: string): Promise<DigestPreview> {
   const params = new URLSearchParams({ date });
   if (BROWSER_TZ) params.set("tz", BROWSER_TZ);
   return request<DigestPreview>(`/api/digest/preview?${params.toString()}`);
+}
+
+/** Admin-only: post a day's digest to the configured Slack channel now (v3.9). */
+export function sendDigest(date: string): Promise<{ status: string; date: string }> {
+  return request<{ status: string; date: string }>("/api/digest/send", {
+    method: "POST",
+    body: JSON.stringify({ date }),
+  });
 }
 
 export function reportsCsvUrl(opts: {

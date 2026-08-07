@@ -13,6 +13,7 @@ import {
   deleteEntry,
   getDigestPreview,
   getReport,
+  sendDigest,
   listEntries,
   listUsers,
   reportsCsvUrl,
@@ -646,6 +647,8 @@ function DigestPreviewSection() {
   const [withTasks, setWithTasks] = useState(true);
   const [preview, setPreview] = useState<DigestPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -657,15 +660,34 @@ function DigestPreviewSection() {
       .catch((err) => {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "failed to load digest preview");
       });
+    setSent(null);
     return () => {
       cancelled = true;
     };
   }, [date]);
 
+  async function handleSend() {
+    setSending(true);
+    setError(null);
+    try {
+      await sendDigest(date);
+      setSent(date);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "failed to send digest");
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <section className="section">
       <h2>
-        Daily digest <span className="table-count">preview — nothing is sent</span>
+        Daily digest{" "}
+        <span className="table-count">
+          {preview?.slackConfigured
+            ? "posts to Slack each morning"
+            : "preview only — Slack not configured"}
+        </span>
       </h2>
       <div className="toolbar">
         <label className="inline-label">
@@ -688,6 +710,11 @@ function DigestPreviewSection() {
             Table only
           </button>
         </div>
+        {preview?.slackConfigured && (
+          <button type="button" className="btn" disabled={sending} onClick={handleSend}>
+            {sending ? "Sending…" : sent === date ? "Sent ✓" : "Send to Slack now"}
+          </button>
+        )}
       </div>
       {error && <p className="error-text">{error}</p>}
       {preview && (
