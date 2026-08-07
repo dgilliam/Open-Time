@@ -633,8 +633,9 @@ export default function DashboardPage() {
 /**
  * Daily digest preview (v3.9 prototype): renders exactly what the future
  * Slack digest would say for a chosen day — nothing is sent from here. The
- * styled block mirrors Slack's rendering; the raw mrkdwn text underneath is
- * the literal payload, ready to eyeball or paste into Slack manually.
+ * member/hours table is a Slack code block (the only way Slack renders
+ * aligned columns), so the monospace preview below IS what the channel
+ * would see. The toggle compares the table-only and table+tasks variants.
  */
 function DigestPreviewSection() {
   const [date, setDate] = useState(() => {
@@ -642,6 +643,7 @@ function DigestPreviewSection() {
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   });
+  const [withTasks, setWithTasks] = useState(true);
   const [preview, setPreview] = useState<DigestPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -670,44 +672,27 @@ function DigestPreviewSection() {
           Day
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
+        <div className="preset-group">
+          <button
+            type="button"
+            className={withTasks ? "btn btn-preset active" : "btn btn-preset"}
+            onClick={() => setWithTasks(true)}
+          >
+            Table + tasks
+          </button>
+          <button
+            type="button"
+            className={!withTasks ? "btn btn-preset active" : "btn btn-preset"}
+            onClick={() => setWithTasks(false)}
+          >
+            Table only
+          </button>
+        </div>
       </div>
       {error && <p className="error-text">{error}</p>}
       {preview && (
         <div className="digest-preview">
-          <div className="digest-card">
-            <div className="digest-title">
-              🕒 <span className="strong">Open-Time — {formatShortDate(parseLocalDate(preview.digest.date))}</span>
-            </div>
-            {preview.digest.members.length === 0 ? (
-              <p className="muted">No hours logged.</p>
-            ) : (
-              <>
-                <div className="digest-subtitle strong">
-                  {preview.digest.members.length} logged · {hoursLabel(preview.digest.totalHours * 3600)} total
-                </div>
-                <ul className="digest-lines">
-                  {preview.digest.members.map((m) => (
-                    <li key={m.id}>
-                      <span className="strong">{m.name}</span> — {hoursLabel(m.hours * 3600)}:{" "}
-                      {m.tasks.map((t, i) => (
-                        <span key={t.task}>
-                          {i > 0 && ", "}
-                          <span className="mono digest-task">{t.task}</span> {hoursLabel(t.hours * 3600)}
-                        </span>
-                      ))}
-                    </li>
-                  ))}
-                </ul>
-                {preview.digest.noHours.length > 0 && (
-                  <p className="muted digest-nohours">No hours: {preview.digest.noHours.join(", ")}</p>
-                )}
-              </>
-            )}
-          </div>
-          <details className="digest-raw">
-            <summary className="muted">Raw Slack text</summary>
-            <pre>{preview.slackText}</pre>
-          </details>
+          <pre className="digest-slack">{withTasks ? preview.slackText : preview.slackTextTableOnly}</pre>
         </div>
       )}
     </section>

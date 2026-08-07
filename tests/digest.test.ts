@@ -90,11 +90,37 @@ describe("renderDigestSlackText", () => {
       startedAt: "2026-07-17T15:00:00.000Z",
       stoppedAt: "2026-07-17T17:30:00.000Z",
     });
-    const text = digest.renderDigestSlackText(digest.buildDailyDigest("2026-07-17", "UTC"));
+    const d = digest.buildDailyDigest("2026-07-17", "UTC");
+    const text = digest.renderDigestSlackText(d);
     expect(text).toContain(":clock3: *Open-Time — Friday, Jul 17*");
     expect(text).toContain("*1 logged · 2.5h total*");
-    expect(text).toContain("• *Ada* — 2.5h: `eval harness` 2.5h");
+    // Table lives in a code block (Slack's only monospace/aligned context).
+    expect(text).toContain("```");
+    expect(text).toContain("Member  Hours");
+    expect(text).toContain("Ada      2.5h");
+    expect(text).toContain("Total    2.5h");
+    // Task lines don't repeat the member total — the table already has it.
+    expect(text).toContain("• *Ada* — `eval harness` 2.5h");
     expect(text).toContain("_No hours: Grace_");
+
+    // Table-only variant drops the bullets but keeps table + footer.
+    const tableOnly = digest.renderDigestSlackText(d, { tasks: false });
+    expect(tableOnly).toContain("Ada      2.5h");
+    expect(tableOnly).not.toContain("• *Ada*");
+    expect(tableOnly).toContain("_No hours: Grace_");
+  });
+
+  it("ellipsizes very long free-text task names", () => {
+    const long = "Claude Code (Opus/max): repo orientation and money movement surface mapping deep dive";
+    repo.createEntry({
+      userId: ada.id,
+      task: long,
+      startedAt: "2026-07-17T15:00:00.000Z",
+      stoppedAt: "2026-07-17T16:00:00.000Z",
+    });
+    const text = digest.renderDigestSlackText(digest.buildDailyDigest("2026-07-17", "UTC"));
+    expect(text).toContain("…");
+    expect(text).not.toContain(long);
   });
 
   it("renders a quiet day as a one-liner", () => {

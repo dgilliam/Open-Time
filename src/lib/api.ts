@@ -234,6 +234,7 @@ export interface DigestPreview {
     noHours: string[];
   };
   slackText: string;
+  slackTextTableOnly: string;
 }
 
 /** Admin-only: the daily digest for a date, rendered but never sent. */

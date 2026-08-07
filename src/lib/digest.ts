@@ -84,11 +84,24 @@ function friendlyDate(date: string): string {
   });
 }
 
+/** Longest task name kept intact in the digest's task lines; longer names ellipsize. */
+const TASK_NAME_MAX = 44;
+
+function truncateTask(name: string): string {
+  return name.length > TASK_NAME_MAX + 1 ? `${name.slice(0, TASK_NAME_MAX)}…` : name;
+}
+
 /**
  * Slack mrkdwn rendering — the exact text a future scheduler would post.
  * Kept dumb and deterministic so the Dashboard preview IS the contract.
+ *
+ * The member/hours table lives in a code block: Slack only renders
+ * monospace (and therefore aligned columns) there, so a fenced block is the
+ * only way to get a real table in a message. `tasks: false` drops the
+ * per-task section for a table-only digest.
  */
-export function renderDigestSlackText(d: DailyDigest): string {
+export function renderDigestSlackText(d: DailyDigest, opts: { tasks?: boolean } = {}): string {
+  const withTasks = opts.tasks !== false;
   const lines: string[] = [];
   lines.push(`:clock3: *Open-Time — ${friendlyDate(d.date)}*`);
   if (d.members.length === 0) {
@@ -96,11 +109,27 @@ export function renderDigestSlackText(d: DailyDigest): string {
     return lines.join("\n");
   }
   lines.push(`*${d.members.length} logged · ${hoursLabel(d.totalHours)} total*`);
-  lines.push("");
-  for (const m of d.members) {
-    const tasks = m.tasks.map((t) => `\`${t.task}\` ${hoursLabel(t.hours)}`).join(", ");
-    lines.push(`• *${m.name}* — ${hoursLabel(m.hours)}: ${tasks}`);
+
+  // Column widths sized to the content so the table stays tight on mobile.
+  const nameWidth = Math.max(6, ...d.members.map((m) => m.name.length));
+  const hourCells = d.members.map((m) => hoursLabel(m.hours));
+  const hoursWidth = Math.max(5, ...hourCells.map((h) => h.length));
+  lines.push("```");
+  lines.push(`${"Member".padEnd(nameWidth)}  ${"Hours".padStart(hoursWidth)}`);
+  lines.push(`${"─".repeat(nameWidth)}  ${"─".repeat(hoursWidth)}`);
+  d.members.forEach((m, i) => {
+    lines.push(`${m.name.padEnd(nameWidth)}  ${hourCells[i].padStart(hoursWidth)}`);
+  });
+  lines.push(`${"Total".padEnd(nameWidth)}  ${hoursLabel(d.totalHours).padStart(hoursWidth)}`);
+  lines.push("```");
+
+  if (withTasks) {
+    for (const m of d.members) {
+      const tasks = m.tasks.map((t) => `\`${truncateTask(t.task)}\` ${hoursLabel(t.hours)}`).join(", ");
+      lines.push(`• *${m.name}* — ${tasks}`);
+    }
   }
+
   if (d.noHours.length > 0) {
     lines.push("");
     lines.push(`_No hours: ${d.noHours.join(", ")}_`);

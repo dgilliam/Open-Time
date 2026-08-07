@@ -21,7 +21,15 @@ export async function GET(req: NextRequest) {
     }
     const tz = params.get("tz") ?? undefined;
     const digest = buildDailyDigest(date, tz);
-    return NextResponse.json({ data: { digest, slackText: renderDigestSlackText(digest) } });
+    // Both variants so the admin can compare table-only vs table+tasks
+    // before we commit to one for the scheduled post.
+    return NextResponse.json({
+      data: {
+        digest,
+        slackText: renderDigestSlackText(digest),
+        slackTextTableOnly: renderDigestSlackText(digest, { tasks: false }),
+      },
+    });
   } catch (err) {
     const { status, body } = apiErrorResponse(err);
     return NextResponse.json(body, { status });
