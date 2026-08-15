@@ -19,6 +19,15 @@ already have a Railway account and this repo pushed to GitHub.
 3. **Set environment variables** on the service:
    - `OPENTIME_DB=/data/opentime.db`
    - `OPENTIME_BACKUP_DIR=/data/backups`
+   - `OPENTIME_BASE_URL=https://<your-domain>` — the public URL as a
+     browser sees it. Set this on every production deploy. Without it the
+     app has to infer its own address from the `x-forwarded-host` header,
+     which is client-supplied data that Railway happens to overwrite;
+     that value becomes the OAuth redirect target, so pinning it here
+     removes the guesswork. See "Base URL and proxy headers" below.
+   - `OPENTIME_SETUP_TOKEN=<long random string>` — required to create the
+     admin account at `/setup`. See "First run" below for why this
+     matters beyond the initial deploy.
 4. **Build/start commands** — Railway auto-detects this as a Next.js app:
    build `npm run build`, start `npm start`. No changes needed; `next
    start` already honors Railway's injected `PORT`.
@@ -30,14 +39,46 @@ already have a Railway account and this repo pushed to GitHub.
 ## First run
 
 - Visit `/setup` once the service is live and create the **admin**
-  account with a strong password — the users table starts empty, and
-  `/setup` only works while it's empty.
+  account with a strong password. The form asks for the
+  `OPENTIME_SETUP_TOKEN` you set above; paste it in.
 - Add teammates from `/team` (admin only) and share their passwords with
   them directly. There's no self-registration and no password-reset flow
   in this MVP.
 - **Never run `npm run seed` against production.** It wipes all data and
-  recreates demo users with public, well-known passwords. It's a local
-  dev convenience only.
+  recreates demo users with passwords published in this repo. The script
+  now refuses to run when `NODE_ENV=production`, when
+  `RAILWAY_ENVIRONMENT` is set, or when `OPENTIME_DB` points under
+  `/data` — but don't rely on that; it's a backstop, not permission to
+  be casual.
+
+### Why `/setup` needs a token
+
+`POST /api/setup` creates an **admin** with no authentication — it's
+gated only on the users table being empty. That's fine for the minute
+between first deploy and your first visit. The lasting risk is different:
+if the volume is ever detached, remounted empty, or `OPENTIME_DB` is
+repointed, the app recreates an empty schema on boot and `/setup` reopens
+on a live, public URL. The first visitor would become admin over your
+restored data.
+
+With `OPENTIME_SETUP_TOKEN` set, only someone holding that token can do
+it. As a second line of defence, if no token is configured, setup refuses
+whenever the backup directory already contains snapshots — an empty users
+table plus existing backups means a storage incident, so restore rather
+than re-run setup.
+
+## Base URL and proxy headers
+
+`OPENTIME_BASE_URL` takes priority over everything else and is the
+recommended production setting. If it's unset, the app falls back to the
+first hop of `x-forwarded-host`, accepted only if it's a bare
+`hostname[:port]` (no path, no userinfo, no scheme, no CR/LF) with an
+`http`/`https` forwarded proto; anything else falls back to the request's
+own origin.
+
+`OPENTIME_ALLOWED_HOSTS` (optional, comma-separated) restricts which
+forwarded hostnames are accepted. Setting `OPENTIME_BASE_URL` makes it
+unnecessary.
 
 ## Google sign-in (optional, v3.6)
 
@@ -72,9 +113,11 @@ Notes:
   unusable random password — Google is their login). Unset = off.
   Removed members are never resurrected this way; restoring them stays
   an admin action on the Team page.
-- If the deploy sits behind a proxy whose request origin isn't the
-  public URL, set `OPENTIME_BASE_URL=https://time.reposcout.com` so the
-  callback URL sent to Google matches the one registered.
+- Set `OPENTIME_BASE_URL=https://time.reposcout.com` (see the deploy
+  steps above) so the callback URL sent to Google matches the one
+  registered here. Behind Railway's proxy the app's own request origin is
+  an internal address, so without this the redirect URI is derived from a
+  request header.
 
 ## Daily Slack digest (optional, v3.9)
 

@@ -2,3 +2,9 @@ node_modules
 .next
 data/
 *.tsbuildinfo
+
+# Secrets. DEPLOY.md tells you to put GOOGLE_CLIENT_SECRET (and friends) in
+# .env.local for local dev — none of that may ever be committed.
+.env
+.env.*
+!.env.example

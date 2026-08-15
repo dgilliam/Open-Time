@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
+import { csvField } from "@/lib/csv";
 import { invoicePeriodDetail } from "@/lib/invoices";
 import { apiErrorResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const CSV_HEADER = "engineer,bill_rate,hours";
-
-/** Double-quotes a field if it contains a comma, quote, or newline, per RFC 4180. */
-function csvField(value: string): string {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
 
 /** Admin only: columns exactly engineer,bill_rate,hours — bill_rate is always empty (the founder fills rates). */
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {

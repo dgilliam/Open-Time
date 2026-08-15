@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertSelfOrAdmin, requireUser } from "@/lib/auth";
+import { csvField } from "@/lib/csv";
 import { listEntries, localDateKey, zoneDateKey } from "@/lib/repo";
 import { apiErrorResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const CSV_HEADER = "member,project,task,task_status,task_link,task_details,duration_hours,date";
-
-/** Double-quotes a field if it contains a comma, quote, or newline, per RFC 4180. */
-function csvField(value: string): string {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
 
 /** Renders a from/to bound as YYYY-MM-DD for the filename, or "all" when absent. */
 function filenameBound(iso: string | undefined): string {

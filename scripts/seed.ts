@@ -43,7 +43,45 @@ const TASK_NAMES = [
   "REL9-tag-v2-release",
 ] as const;
 
+/**
+ * Refuses to run anywhere that looks like production (security review
+ * 2026-08-15). DEPLOY.md warned about this in prose, but nothing enforced
+ * it: the script honors OPENTIME_DB, so running it with the production
+ * environment loaded — or from a Railway shell — wipes every table and
+ * recreates accounts whose passwords are published in this repo.
+ *
+ * OPENTIME_SEED_FORCE=1 is the deliberate override for the rare case of
+ * seeding a throwaway environment that happens to set NODE_ENV=production.
+ */
+function assertNotProduction(): void {
+  if (process.env.OPENTIME_SEED_FORCE === "1") {
+    console.warn("[seed] OPENTIME_SEED_FORCE=1 — skipping the production guard.");
+    return;
+  }
+
+  const reasons: string[] = [];
+  if (process.env.NODE_ENV === "production") reasons.push("NODE_ENV=production");
+  if (process.env.RAILWAY_ENVIRONMENT) {
+    reasons.push(`RAILWAY_ENVIRONMENT=${process.env.RAILWAY_ENVIRONMENT}`);
+  }
+  // The Railway volume mount from DEPLOY.md. A local dev DB lives under the
+  // repo's data/ directory, never /data.
+  const dbPath = process.env.OPENTIME_DB ?? "";
+  if (dbPath.startsWith("/data")) reasons.push(`OPENTIME_DB=${dbPath}`);
+
+  if (reasons.length > 0) {
+    console.error(
+      `\n[seed] REFUSING TO RUN — this looks like production (${reasons.join(", ")}).\n` +
+        "[seed] This script DELETEs every table and recreates demo accounts with\n" +
+        "[seed] passwords published in this repo. If you really mean it, re-run with\n" +
+        "[seed] OPENTIME_SEED_FORCE=1.\n"
+    );
+    process.exit(1);
+  }
+}
+
 function main() {
+  assertNotProduction();
   console.log("Seeding database...");
 
   // invoice_periods must be wiped too: sweeping happens only at period

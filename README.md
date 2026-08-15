@@ -13,11 +13,18 @@ rationale and API contract.
 
 ## Quickstart
 
+Requires **Node 22** (see `.nvmrc`) — `better-sqlite3` has no prebuilt
+binary for newer majors and its native compile fails. `nvm use` picks it
+up automatically.
+
 ```bash
 npm install
 npm run seed   # resets data/opentime.db with a sample team + 10 weeks of entries
 npm run dev    # http://localhost:3000
 ```
+
+`npm run seed` refuses to run against anything that looks like production
+— it deletes every table and installs the passwords listed below.
 
 Seeded logins:
 
@@ -84,7 +91,12 @@ there is no self-registration.
   cookie whose token is stored only as a SHA-256 hash. Route guards in
   `src/lib/auth.ts`. The cookie is `secure` automatically in production
   (`NODE_ENV=production`), which is why local production testing needs a
-  real HTTPS host — see `DEPLOY.md`.
+  real HTTPS host — see `DEPLOY.md`. Failed sign-ins are throttled
+  per-email and per-IP (`src/lib/ratelimit.ts`).
+- **Security posture**: see `docs/PLAN.md` v3.10 for the 2026-08-15
+  review — what was found, what was fixed, and which trade-offs were
+  taken deliberately (notably `script-src 'unsafe-inline'` in the CSP).
+  `/setup` is gated by `OPENTIME_SETUP_TOKEN` in production.
 - **API shape**: `{ "data": ... }` on success, `{ "error": "message" }`
   with 400/401/403/404/409 on failure. Full contract in `docs/PLAN.md`.
 - **Rounding**: `duration_secs = max(0.5h, nearest 0.5h)` computed at

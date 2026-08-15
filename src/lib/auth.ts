@@ -27,6 +27,29 @@ export function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqual(derived, hashBuf);
 }
 
+// A real hash over a random secret, derived once at boot, purely to give
+// verifyLoginPassword something to burn the same ~100ms of scrypt on when no
+// user matched (security review 2026-08-15). Nothing can authenticate
+// against it — the plaintext is discarded here and never leaves this scope.
+const DUMMY_PASSWORD_HASH = hashPassword(randomBytes(32).toString("hex"));
+
+/**
+ * Password check for the login path. Callers pass the stored hash, or null
+ * when the email matched no member — in which case this still runs a full
+ * scrypt derivation before returning false.
+ *
+ * Without that, a missing email returned in microseconds while a real one
+ * paid for scrypt, and the gap was a reliable "is this address a member?"
+ * oracle even though both paths return the same 401 text.
+ */
+export function verifyLoginPassword(password: string, stored: string | null): boolean {
+  if (stored === null) {
+    verifyPassword(password, DUMMY_PASSWORD_HASH);
+    return false;
+  }
+  return verifyPassword(password, stored);
+}
+
 // ---------- sessions ----------
 // The session cookie holds a random opaque token; only its SHA-256 hash is
 // stored in the sessions table, so a leaked DB row can't be replayed as a

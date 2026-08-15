@@ -58,11 +58,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ---------- setup ----------
 
-export function getSetupStatus(): Promise<{ needed: boolean }> {
-  return request<{ needed: boolean }>("/api/setup");
+export interface SetupStatus {
+  needed: boolean;
+  /** OPENTIME_SETUP_TOKEN is configured — the form must collect it. */
+  tokenRequired: boolean;
+  /** Setup refused despite an empty users table (see src/lib/setup.ts). */
+  blocked: boolean;
+  reason?: string;
 }
 
-export function setup(input: { name: string; email: string; password: string }): Promise<User> {
+export function getSetupStatus(): Promise<SetupStatus> {
+  return request<SetupStatus>("/api/setup");
+}
+
+export function setup(input: {
+  name: string;
+  email: string;
+  password: string;
+  token?: string;
+}): Promise<User> {
   return request<User>("/api/setup", { method: "POST", body: JSON.stringify(input) });
 }
 

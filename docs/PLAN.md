@@ -623,6 +623,65 @@ are **live until locked**.
 - Admin flow: Monday — open Invoices (page load re-sweeps), Export
   CSV, Lock.
 
+## v3.10 — Security hardening (2026-08-15)
+
+A review of the application code (auth, all API routes, repo/invoice
+layers) plus an `npm audit` pass. The authorization model held up — every
+route guard was present and correctly applied, and all SQL is
+parameterized — so the findings are about the surfaces *around* it.
+
+- **Login throttling** (`src/lib/ratelimit.ts`). Unlimited password
+  guesses against an 8-character minimum was the most realistic way in.
+  In-memory buckets, per-email AND per-IP, both of which must allow an
+  attempt: the email bucket survives IP rotation, the IP bucket catches
+  spraying across accounts. 5 free attempts, then exponential backoff
+  capped at 15 minutes. In-memory is the right size for a single-process
+  SQLite app — a restart clearing counters is not attacker-triggerable.
+- **Login timing equalized** (`verifyLoginPassword`). An unknown email
+  used to return before doing any scrypt work, which made response time
+  a member-enumeration oracle despite identical 401 bodies. The unknown
+  branch now derives against a boot-time dummy hash.
+- **First-run setup gated** (`src/lib/setup.ts`). `POST /api/setup`
+  mints an admin with no authentication. The deploy window is accepted;
+  the durable hole was volume loss — an empty DB silently reopens setup
+  on a live URL. Now: `OPENTIME_SETUP_TOKEN` when set is required, and
+  absent a token, setup refuses when backups exist on disk (data was
+  here before → restore, don't re-setup). Also closed a TOCTOU race: the
+  count check and the insert no longer straddle an `await`.
+- **Forwarded-host trust** (`appBaseUrl`). `x-forwarded-host` feeds both
+  the OAuth `redirect_uri` and the post-login redirect, i.e. an open
+  redirect carrying a fresh session. The header path is kept (removing
+  it breaks deploys without `OPENTIME_BASE_URL`) but strictly validated
+  — first hop only, hostname[:port] shape only, http/https only — with
+  an optional `OPENTIME_ALLOWED_HOSTS` allow-list. Setting
+  `OPENTIME_BASE_URL` bypasses all of it and is now the documented
+  production requirement.
+- **CSV formula injection** (`src/lib/csv.ts`, shared by both exports,
+  replacing two duplicate copies of the quoting helper). Task names,
+  task details, and member names are member-controlled and land in
+  files the founder opens in a spreadsheet to bill from. RFC 4180
+  quoting does not stop formula evaluation; a leading `'` does.
+- **Security headers** (`next.config.ts`): CSP with `frame-ancestors
+  'none'`, X-Frame-Options, nosniff, Referrer-Policy,
+  Permissions-Policy, and HSTS in production. `script-src` keeps
+  `'unsafe-inline'` — dropping it needs per-request nonces from
+  middleware this app doesn't have, and there is no user-generated HTML
+  anywhere. Verified against a production build: every page renders
+  with no console violations.
+- **Seed guard** (`scripts/seed.ts`): refuses to run when NODE_ENV is
+  production, `RAILWAY_ENVIRONMENT` is set, or `OPENTIME_DB` points
+  under `/data`. It wipes every table and installs passwords published
+  in this repo; DEPLOY.md warned in prose but nothing enforced it.
+  `OPENTIME_SEED_FORCE=1` overrides.
+- **Dependencies**: all 9 advisories cleared. `next` 15.5.20 → 15.5.23,
+  `vitest` 2.1.9 → 4.1.10 (clean — no config or test changes needed).
+  `postcss`/`sharp`/`nanoid` needed `overrides`: next 15.5.x pins
+  vulnerable versions of the first two and npm's only offered fix was
+  `next@16`, a major. Drop the overrides when 15.x ships the bumps.
+- `.gitignore` had no `.env*` rule while DEPLOY.md tells devs to put
+  `GOOGLE_CLIENT_SECRET` in `.env.local`. Added, plus `.nvmrc` (this
+  repo needs Node 22 — better-sqlite3 has no Node 26 prebuild).
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old

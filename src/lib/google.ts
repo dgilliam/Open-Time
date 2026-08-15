@@ -46,6 +46,24 @@ export function autoProvisionDomains(): string[] {
     .filter(Boolean);
 }
 
+// A bare hostname or hostname:port, nothing else. Rejects the shapes that
+// make a forwarded host dangerous: embedded paths ("evil.com/x"), userinfo
+// ("evil.com@real.com"), schemes, whitespace, and CR/LF.
+const HOST_RE = /^[A-Za-z0-9.-]+(:\d{1,5})?$/;
+
+/**
+ * Optional hard allow-list of hostnames accepted from x-forwarded-host,
+ * comma-separated. Unset = any syntactically valid host passes (still
+ * subject to HOST_RE). Setting OPENTIME_BASE_URL is the stronger control
+ * and makes this moot.
+ */
+function allowedForwardedHosts(): string[] {
+  return (process.env.OPENTIME_ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 /**
  * The app's public base URL as the BROWSER sees it — required for the
  * redirect URI sent to Google and for the OAuth routes' own redirects.
@@ -53,13 +71,29 @@ export function autoProvisionDomains(): string[] {
  * internal address (e.g. https://localhost:8080), so: explicit
  * OPENTIME_BASE_URL wins, then the proxy's x-forwarded-host/proto
  * headers, then the raw request origin (correct for local dev).
+ *
+ * Hardening (security review 2026-08-15): x-forwarded-host is client-supplied
+ * data that Railway happens to overwrite — it is not trustworthy on its own,
+ * and this value ends up as both the OAuth redirect_uri and the post-login
+ * redirect target, i.e. an open redirect carrying a fresh session. The header
+ * path is kept (removing it would break any deploy that hasn't set
+ * OPENTIME_BASE_URL) but is now strictly validated, and the fallbacks are
+ * ordered so a malformed header degrades to the request's own origin rather
+ * than to attacker-chosen text. Set OPENTIME_BASE_URL in production and none
+ * of this is reachable.
  */
 export function appBaseUrl(req: { headers: Headers; nextUrl: { origin: string } }): string {
   if (process.env.OPENTIME_BASE_URL) return process.env.OPENTIME_BASE_URL.replace(/\/$/, "");
-  const forwardedHost = req.headers.get("x-forwarded-host");
-  if (forwardedHost) {
-    const proto = req.headers.get("x-forwarded-proto") ?? "https";
-    return `${proto}://${forwardedHost}`;
+
+  // A proxy chain appends, so the first value is the original client-facing host.
+  const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  if (forwardedHost && HOST_RE.test(forwardedHost)) {
+    const allowed = allowedForwardedHosts();
+    if (allowed.length === 0 || allowed.includes(forwardedHost.toLowerCase())) {
+      const rawProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+      const proto = rawProto === "http" || rawProto === "https" ? rawProto : "https";
+      return `${proto}://${forwardedHost}`;
+    }
   }
   return req.nextUrl.origin;
 }
