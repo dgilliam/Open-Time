@@ -25,6 +25,7 @@ import {
   formatReportDates,
   formatShortDate,
   formatTime,
+  hoursCell,
   hoursLabel,
   parseLocalDate,
   pluralCount,
@@ -364,7 +365,7 @@ export default function DashboardPage() {
                     <tr key={row.user.id}>
                       <td className="strong">{row.user.name}</td>
                       <td className="muted">{row.user.project ?? "—"}</td>
-                      <td className="num">{hoursLabel(row.hours * 3600)}</td>
+                      <td className="num">{hoursCell(row.hours * 3600)}</td>
                       <td className="num">{row.activeDays}</td>
                       <td className="muted">
                         {row.lastWorked ? formatShortDate(parseLocalDate(row.lastWorked)) : "—"}
@@ -376,7 +377,7 @@ export default function DashboardPage() {
                   <tr>
                     <td>Total</td>
                     <td></td>
-                    <td className="num">{hoursLabel((userReport?.totalHours ?? 0) * 3600)}</td>
+                    <td className="num">{hoursCell((userReport?.totalHours ?? 0) * 3600)}</td>
                     <td></td>
                     <td></td>
                   </tr>
@@ -432,10 +433,10 @@ export default function DashboardPage() {
                           </a>
                         )}
                       </td>
-                      <td className="num">{hoursLabel(g.hours * 3600)}</td>
+                      <td className="num">{hoursCell(g.hours * 3600)}</td>
                       <td className="muted cell-wrap">
                         {(g.contributors ?? [])
-                          .map((c) => `${c.name} ${hoursLabel(c.hours * 3600)}`)
+                          .map((c) => `${c.name} ${hoursCell(c.hours * 3600)}`)
                           .join(", ") || "—"}
                       </td>
                       <td className="muted cell-wrap">{formatReportDates(g.dates)}</td>
@@ -460,7 +461,7 @@ export default function DashboardPage() {
                 <tfoot>
                   <tr>
                     <td>Total</td>
-                    <td className="num">{hoursLabel((taskReport?.totalHours ?? 0) * 3600)}</td>
+                    <td className="num">{hoursCell((taskReport?.totalHours ?? 0) * 3600)}</td>
                     <td></td>
                     <td></td>
                     <td></td>
@@ -546,7 +547,7 @@ export default function DashboardPage() {
                       <td>{formatTime(entry.startedAt)}</td>
                       <td>{entry.stoppedAt ? formatTime(entry.stoppedAt) : "—"}</td>
                       <td className="num">
-                        {entry.durationSecs != null ? hoursLabel(entry.durationSecs) : "—"}
+                        {entry.durationSecs != null ? hoursCell(entry.durationSecs) : "—"}
                         {entry.invoicePeriodId && <span className="muted small invoiced-marker"> · invoiced</span>}
                       </td>
                       <td className="row-actions">
@@ -580,7 +581,7 @@ export default function DashboardPage() {
                         note above explains the difference when the cap is
                         active. */}
                     <td colSpan={6}>Total</td>
-                    <td className="num">{hoursLabel(displayedTotalSecs)}</td>
+                    <td className="num">{hoursCell(displayedTotalSecs)}</td>
                     <td></td>
                   </tr>
                 </tfoot>

@@ -13,12 +13,34 @@ export function formatHms(totalSeconds: number, short = false): string {
   return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-/** Format a number of seconds as decimal hours, trimming trailing zeros, e.g. "1.5h". */
-export function hoursLabel(totalSeconds: number, digits = 2): string {
+/** Decimal hours with trailing zeros trimmed and no unit, e.g. "1.5". */
+function hoursValue(totalSeconds: number, digits = 2): string {
   const hours = totalSeconds / 3600;
   const fixed = hours.toFixed(digits);
   const trimmed = fixed.replace(/0+$/, "").replace(/\.$/, "");
-  return `${trimmed === "" ? "0" : trimmed}h`;
+  return trimmed === "" ? "0" : trimmed;
+}
+
+/** Format a number of seconds as decimal hours, trimming trailing zeros, e.g. "1.5h". */
+export function hoursLabel(totalSeconds: number, digits = 2): string {
+  return `${hoursValue(totalSeconds, digits)}h`;
+}
+
+/**
+ * Same value as hoursLabel but with a space before the unit — "1.5 h" — for
+ * hours rendered in a TABLE CELL.
+ *
+ * The space is load-bearing, not cosmetic: these tables get copied into
+ * Google Sheets, where the cells arrive as text. Stripping the unit with a
+ * find-and-replace on "h" also mangles every name containing an h
+ * ("Anastasia Khomchenko"), whereas replacing " h" only ever hits the unit,
+ * turning the column into real numbers in one pass.
+ *
+ * Non-table surfaces (stat tiles, week cards, month cells, tooltips) keep
+ * hoursLabel — nobody copies those into a spreadsheet.
+ */
+export function hoursCell(totalSeconds: number, digits = 2): string {
+  return `${hoursValue(totalSeconds, digits)} h`;
 }
 
 /**

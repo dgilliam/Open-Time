@@ -9,7 +9,7 @@ import {
   addDays,
   dateInputValue,
   formatReportDates,
-  hoursLabel,
+  hoursCell,
   parseLocalDate,
   pluralCount,
   startOfMonth,
@@ -311,7 +311,7 @@ export default function ReportsPage() {
                     ) : (
                       <td className="num">{g.taskCount ?? 0}</td>
                     )}
-                    <td className="num">{hoursLabel(g.hours * 3600)}</td>
+                    <td className="num">{hoursCell(g.hours * 3600)}</td>
                   </tr>
                 ))}
                 {sortedGroups.length === 0 && (
@@ -335,7 +335,7 @@ export default function ReportsPage() {
                     // Distinct across the team, not the per-user sum (people share tasks).
                     <td className="num">{result.distinctTaskCount}</td>
                   )}
-                  <td className="num">{hoursLabel(result.totalHours * 3600)}</td>
+                  <td className="num">{hoursCell(result.totalHours * 3600)}</td>
                 </tr>
               </tfoot>
             </table>

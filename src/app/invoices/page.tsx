@@ -15,7 +15,7 @@ import {
   listInvoices,
   setInvoicePeriodLocked,
 } from "@/lib/api";
-import { formatShortDate, hoursLabel, parseLocalDate, pluralCount } from "@/lib/format";
+import { formatShortDate, hoursCell, hoursLabel, parseLocalDate, pluralCount } from "@/lib/format";
 import type { CurrentUninvoiced, InvoicePeriodDetail, InvoicePeriodSummary } from "@/lib/types";
 import { useSession } from "@/components/SessionContext";
 
@@ -159,7 +159,7 @@ export default function InvoicesPage() {
                 {current.members.map((m) => (
                   <tr key={m.id}>
                     <td className="strong">{m.name}</td>
-                    <td className="num">{hoursLabel(m.hours * 3600)}</td>
+                    <td className="num">{hoursCell(m.hours * 3600)}</td>
                   </tr>
                 ))}
                 {current.members.length === 0 && (
@@ -173,7 +173,7 @@ export default function InvoicesPage() {
               <tfoot>
                 <tr>
                   <td>Total</td>
-                  <td className="num">{hoursLabel(current.totalHours * 3600)}</td>
+                  <td className="num">{hoursCell(current.totalHours * 3600)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -252,7 +252,7 @@ export default function InvoicesPage() {
                                 {detail.members.map((m) => (
                                   <tr key={m.id}>
                                     <td>{m.name}</td>
-                                    <td className="num">{hoursLabel(m.hours * 3600)}</td>
+                                    <td className="num">{hoursCell(m.hours * 3600)}</td>
                                   </tr>
                                 ))}
                                 {detail.members.length === 0 && (
@@ -266,7 +266,7 @@ export default function InvoicesPage() {
                               <tfoot>
                                 <tr>
                                   <td>Total</td>
-                                  <td className="num">{hoursLabel(detailTotalHours * 3600)}</td>
+                                  <td className="num">{hoursCell(detailTotalHours * 3600)}</td>
                                 </tr>
                               </tfoot>
                             </table>
@@ -285,7 +285,7 @@ export default function InvoicesPage() {
                                   <tr key={i}>
                                     <td>{row.member}</td>
                                     <td className="mono">{row.task}</td>
-                                    <td className="num">{hoursLabel(row.hours * 3600)}</td>
+                                    <td className="num">{hoursCell(row.hours * 3600)}</td>
                                   </tr>
                                 ))}
                                 {detail.taskDetail.length === 0 && (
