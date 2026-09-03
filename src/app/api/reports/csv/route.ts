@@ -6,7 +6,31 @@ import { apiErrorResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const CSV_HEADER = "member,project,task,task_status,task_link,task_details,duration_hours,date";
+// The first eight columns are the original export and stay in place so
+// existing spreadsheet formulas keep pointing at the right letters. The rest
+// were added for reconciliation (v3.12): `date` is rendered in the
+// DOWNLOADER's timezone, so two people exporting the same range get
+// different dates and — because the from/to window is also viewer-local —
+// can get different totals. entry_id is a stable join key across exports,
+// and started_at_utc/stopped_at_utc are the one representation of the time
+// that never moves. invoice_period says which week-ending invoice (if any)
+// the row was billed on.
+const CSV_HEADER = [
+  "member",
+  "project",
+  "task",
+  "task_status",
+  "task_link",
+  "task_details",
+  "duration_hours",
+  "date",
+  "entry_id",
+  "task_id",
+  "started_at_utc",
+  "stopped_at_utc",
+  "invoice_period",
+  "invoice_locked",
+].join(",");
 
 /** Renders a from/to bound as YYYY-MM-DD for the filename, or "all" when absent. */
 function filenameBound(iso: string | undefined): string {
@@ -44,6 +68,12 @@ export async function GET(req: NextRequest) {
         taskDetails: e.taskDetails ?? "",
         durationHours: (e.durationSecs as number) / 3600,
         date: zoneDateKey(e.startedAt, tz),
+        entryId: e.id,
+        taskId: e.taskId,
+        startedAtUtc: e.startedAt,
+        stoppedAtUtc: e.stoppedAt ?? "",
+        invoicePeriod: e.invoicePeriodLabel ?? "",
+        invoiceLocked: e.invoiceLocked ? "true" : "false",
       }))
       .sort((a, b) => {
         if (a.date !== b.date) return a.date < b.date ? -1 : 1;
@@ -62,6 +92,12 @@ export async function GET(req: NextRequest) {
           csvField(row.taskDetails),
           String(row.durationHours),
           row.date,
+          row.entryId,
+          row.taskId,
+          row.startedAtUtc,
+          row.stoppedAtUtc,
+          row.invoicePeriod,
+          row.invoiceLocked,
         ].join(",")
       );
     }

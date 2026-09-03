@@ -163,6 +163,11 @@ export default function ReportsPage() {
     from: csvFrom,
     to: csvTo,
   });
+  // Every completed entry, every member (removed ones included), no date
+  // window — the reconciliation dump. Same columns as Export CSV; the point
+  // is that with no from/to there is no viewer-local boundary to disagree
+  // about, and the UTC columns give a stable join key. Admin only.
+  const rawHref = reportsCsvUrl({ userId: "all" });
 
   return (
     <div className="page">
@@ -232,6 +237,11 @@ export default function ReportsPage() {
         <a className="btn" href={csvHref}>
           Export CSV
         </a>
+        {user.role === "admin" && (
+          <a className="btn" href={rawHref} title="Every entry, every member, all time — with IDs and UTC timestamps">
+            Export all (raw)
+          </a>
+        )}
       </div>
       {error && <p className="error-text">{error}</p>}
       {result && (

@@ -682,6 +682,42 @@ parameterized — so the findings are about the surfaces *around* it.
   `GOOGLE_CLIENT_SECRET` in `.env.local`. Added, plus `.nvmrc` (this
   repo needs Node 22 — better-sqlite3 has no Node 26 prebuild).
 
+## v3.12 — Reconcilable CSV export (2026-08-22)
+
+Founder feedback: two people in different timezones exporting the same
+range from /reports got different dates AND different totals, with no way
+to line the rows up.
+
+Root cause (reproduced with the app's own helpers): the `date` column is
+rendered in the DOWNLOADER's browser zone (`zoneDateKey(startedAt, tz)`),
+and the from/to window is ALSO the downloader's local midnight converted
+to UTC while the server filters on raw UTC `started_at`. So an IST and a
+Chicago viewer request windows 9.5 h apart. Timesheet-grid submissions are
+stored at 09:00 in the submitter's zone — 03:30 UTC for India — which sits
+right on the UTC day boundary, so every such row lands a day earlier for
+anyone in the Americas, and first/last-of-month rows fall in or out of
+"This month" depending on who clicks Export.
+
+This version does not change the timezone policy. It makes the export
+reconcilable so the discrepancy can be diffed row-by-row:
+
+- Six columns appended AFTER the original eight (which stay in place so
+  spreadsheet formulas keep pointing at the right letters): `entry_id`,
+  `task_id`, `started_at_utc`, `stopped_at_utc`, `invoice_period`
+  (week-ending label, blank if uninvoiced), `invoice_locked`.
+- `TimeEntry.invoicePeriodLabel` joined in `ENTRY_SELECT` so the export
+  can name the invoice without a second lookup.
+- Reports page: admin-only **Export all (raw)** — `/api/reports/csv?
+  userId=all` with no from/to, so there is no viewer-local boundary to
+  disagree about. Every completed entry, every member including removed
+  ones. Filename `opentime_all_all.csv`.
+- `reportsCsvUrl` from/to are now optional.
+
+Fixing the variance itself is a separate decision (options weighed
+2026-08-22: pin reports to OPENTIME_TZ; store grid submissions at noon
+UTC so the date is stable across UTC−12..+11; or both). Deferred until the
+founder has diffed real data with these columns.
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old

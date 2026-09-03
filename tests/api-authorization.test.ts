@@ -454,9 +454,9 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.headers.get("content-type")).toContain("text/csv");
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[0]).toBe("member,project,task,task_status,task_link,task_details,duration_hours,date");
+    expect(lines[0].startsWith("member,project,task,task_status,task_link,task_details,duration_hours,date" + ",")).toBe(true);
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Bob,,AB1-bobs-task,open,,,1,2026-01-01");
+    expect(lines[1].startsWith("Bob,,AB1-bobs-task,open,,,1,2026-01-01" + ",")).toBe(true);
   });
 
   it("includes the member's assigned project in its column", async () => {
@@ -466,7 +466,7 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[1]).toBe("Bob,Platform,AB1-bobs-task,open,,,1,2026-01-01");
+    expect(lines[1].startsWith("Bob,Platform,AB1-bobs-task,open,,,1,2026-01-01" + ",")).toBe(true);
   });
 
   it("200s for admin with userId=all, containing multiple members", async () => {
@@ -483,7 +483,7 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[0]).toBe("member,project,task,task_status,task_link,task_details,duration_hours,date");
+    expect(lines[0].startsWith("member,project,task,task_status,task_link,task_details,duration_hours,date" + ",")).toBe(true);
     const members = lines.slice(1).map((line) => line.split(",")[0]);
     expect(new Set(members)).toEqual(new Set(["Alice", "Bob"]));
   });
@@ -500,7 +500,7 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[1]).toBe('Alice,,"meeting, planning",open,,,1,2026-01-04');
+    expect(lines[1].startsWith('Alice,,"meeting, planning",open,,,1,2026-01-04' + ",")).toBe(true);
   });
 
   it("populates task_status/task_link/task_details from the task's wrap-up metadata", async () => {
@@ -520,9 +520,7 @@ describe("GET /api/reports/csv authorization and content (v2.4)", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     const lines = text.trim().split("\n");
-    expect(lines[1]).toBe(
-      "Alice,,AB50-wrapped-task,accepted,https://reposcout.slack.com/archives/C1/p1,all done,1,2026-01-04"
-    );
+    expect(lines[1].startsWith("Alice,,AB50-wrapped-task,accepted,https://reposcout.slack.com/archives/C1/p1,all done,1,2026-01-04" + ",")).toBe(true);
   });
 
   it("quotes task_details containing a newline so it survives round-trip", async () => {
@@ -588,7 +586,7 @@ describe("GET /api/reports/csv?project= (v2.4 addendum, dashboard entries export
     const text = await res.text();
     const lines = text.trim().split("\n");
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Alice,Platform,AB46-alice-task,open,,,1,2026-01-03");
+    expect(lines[1].startsWith("Alice,Platform,AB46-alice-task,open,,,1,2026-01-03" + ",")).toBe(true);
   });
 
   it("project=__none__ returns only unassigned members' entries", async () => {
@@ -608,7 +606,7 @@ describe("GET /api/reports/csv?project= (v2.4 addendum, dashboard entries export
     const text = await res.text();
     const lines = text.trim().split("\n");
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Bob,,AB1-bobs-task,open,,,1,2026-01-01");
+    expect(lines[1].startsWith("Bob,,AB1-bobs-task,open,,,1,2026-01-01" + ",")).toBe(true);
   });
 
   it("composes with userId=all and no project filter (absent = off)", async () => {
@@ -648,7 +646,7 @@ describe("GET /api/reports/csv?project= (v2.4 addendum, dashboard entries export
     // Self-scope (targetUserId defaults to Bob) still applies: only Bob's row,
     // never Alice's, even though both share the "Platform" project.
     expect(lines.length).toBe(2);
-    expect(lines[1]).toBe("Bob,Platform,AB1-bobs-task,open,,,1,2026-01-01");
+    expect(lines[1].startsWith("Bob,Platform,AB1-bobs-task,open,,,1,2026-01-01" + ",")).toBe(true);
   });
 
   it("403s a member attempting userId=all with a project filter", async () => {

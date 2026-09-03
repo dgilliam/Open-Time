@@ -269,11 +269,14 @@ export function sendDigest(date: string): Promise<{ status: string; date: string
 
 export function reportsCsvUrl(opts: {
   userId?: string;
-  from: string;
-  to: string;
+  /** Omit both bounds for an all-time export (v3.12 raw export). */
+  from?: string;
+  to?: string;
   project?: string;
 }): string {
-  const params = new URLSearchParams({ from: opts.from, to: opts.to });
+  const params = new URLSearchParams();
+  if (opts.from) params.set("from", opts.from);
+  if (opts.to) params.set("to", opts.to);
   if (opts.userId) params.set("userId", opts.userId);
   if (BROWSER_TZ) params.set("tz", BROWSER_TZ);
   // Caller passes the "__none__" sentinel directly for "No project" — see

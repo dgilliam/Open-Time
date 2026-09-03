@@ -50,6 +50,9 @@ export interface TimeEntry {
   // member-facing UIs can grey/hide edit affordances without an extra call.
   invoicePeriodId: string | null;
   invoiceLocked: boolean;
+  // The period's week-ending label (v3.12), so an export can say which
+  // invoice a row was billed on without a second lookup.
+  invoicePeriodLabel: string | null;
   // The entry owner's total rounded seconds recorded against this entry's
   // task across all completed entries (v3.2.1). Lets the running readout
   // continue a resumed task from its recorded total instead of 0:00:00, and

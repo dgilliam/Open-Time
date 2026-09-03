@@ -58,7 +58,9 @@ there is no self-registration.
   12-month activity heatmap. All modes are self-only. `/timesheet` and
   `/calendar` redirect here.
 - **Reports** — hours by task over a date range; admin can view any
-  member or group by user.
+  member or group by user. Export CSV carries the viewed range;
+  admins also get **Export all (raw)** — every entry, all time, with
+  `entry_id` and UTC timestamps for reconciling across timezones.
 - **Dashboard** (admin) — team-wide stats, per-contributor and per-task
   tables, and an entries table for correcting anyone's time.
 - **Invoices** (admin) — weekly invoice periods swept from completed time,

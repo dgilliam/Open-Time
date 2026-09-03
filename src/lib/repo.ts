@@ -75,6 +75,7 @@ interface EntryRow {
   user_project: string | null;
   invoice_period_id: string | null;
   invoice_period_locked: number | null;
+  invoice_period_label: string | null;
   task_recorded_secs: number;
 }
 
@@ -95,6 +96,7 @@ function rowToEntry(row: EntryRow): TimeEntry {
     taskDetails: row.task_details ?? null,
     invoicePeriodId: row.invoice_period_id ?? null,
     invoiceLocked: !!row.invoice_period_locked,
+    invoicePeriodLabel: row.invoice_period_label ?? null,
     taskRecordedSecs: row.task_recorded_secs,
   };
 }
@@ -124,6 +126,7 @@ const ENTRY_SELECT = `
     u.project as user_project,
     e.invoice_period_id as invoice_period_id,
     p.locked as invoice_period_locked,
+    p.label as invoice_period_label,
     (SELECT COALESCE(SUM(d.duration_secs), 0)
        FROM time_entries d
       WHERE d.user_id = e.user_id AND d.task_id = e.task_id AND d.stopped_at IS NOT NULL
