@@ -12,10 +12,19 @@
 //   npx tsx scripts/migrate-grid-utc.ts --csv export.csv          # preview from "Export all (raw)"
 //   npx tsx scripts/migrate-grid-utc.ts --db /data/opentime.db     # preview from a database file
 //   npx tsx scripts/migrate-grid-utc.ts --db ... --apply           # write, in one transaction
+//   npx tsx scripts/migrate-grid-utc.ts --csv export.csv --apply-via https://time.reposcout.com
+//                                                                  # write through the live app's admin API
 //
 // Options:
 //   --since 2026-09-01   only rows whose started_at is on/after this UTC date (default 2026-09-01)
 //   --user  "Name"       restrict to one member
+//
+// --apply-via needs an ADMIN login. It prompts for email + password (password
+// hidden), or reads OT_EMAIL / OT_PASSWORD from the environment. Each row is
+// sent as PATCH /api/entries/[id] {startedAt, stoppedAt} — the same call the
+// Dashboard's edit dialog makes — and the response is checked before moving
+// on. The server re-derives duration from the new span, which is a no-op
+// here because stop is set to start + duration exactly.
 //
 // Scope guards, always enforced:
 //   * only rows with NO invoice period (never a billed row, never a live one)
@@ -34,6 +43,7 @@ const opt = (name: string): string | undefined => {
 const CSV = opt("--csv");
 const DB = opt("--db");
 const APPLY = args.includes("--apply");
+const APPLY_VIA = opt("--apply-via")?.replace(/\/$/, "");
 const SINCE = `${opt("--since") ?? "2026-09-01"}T00:00:00.000Z`;
 const ONLY_USER = opt("--user");
 if (!CSV && !DB) {
@@ -41,7 +51,11 @@ if (!CSV && !DB) {
   process.exit(2);
 }
 if (APPLY && !DB) {
-  console.error("--apply needs --db (a CSV can only be previewed)");
+  console.error("--apply needs --db (a CSV can only be previewed); to write through the live app use --apply-via <url>");
+  process.exit(2);
+}
+if (APPLY && APPLY_VIA) {
+  console.error("use either --apply (database file) or --apply-via (live app), not both");
   process.exit(2);
 }
 
@@ -189,6 +203,67 @@ function plan(r: Row, expectedOffset: number | undefined): Plan | null {
   return { row: r, offsetMin: off, localDate, newStart, newStop };
 }
 
+const hrs = (s: number) => (s / 3600).toString();
+
+// ---------- apply through the live app ----------
+import readline from "node:readline";
+
+function ask(question: string, hidden = false): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    if (hidden) {
+      // Mute echo for the password: readline writes the prompt once, then
+      // every keystroke is swallowed instead of rendered.
+      const out = rl as unknown as { _writeToOutput: (s: string) => void };
+      let asked = false;
+      out._writeToOutput = (str: string) => {
+        if (!asked) { process.stdout.write(str); asked = true; }
+      };
+    }
+    rl.question(question, (answer) => { rl.close(); if (hidden) process.stdout.write("\n"); resolve(answer.trim()); });
+  });
+}
+
+async function applyViaApi(base: string, plans: Plan[]): Promise<void> {
+  const email = process.env.OT_EMAIL || (await ask(`Admin email for ${base}: `));
+  const password = process.env.OT_PASSWORD || (await ask("Password (hidden): ", true));
+
+  const login = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!login.ok) {
+    console.error(`login failed (${login.status}): ${((await login.json().catch(() => ({}))) as { error?: string }).error ?? "unknown"}`);
+    process.exit(1);
+  }
+  const me = (await login.json()) as { data: { name: string; role: string } };
+  const cookie = login.headers.get("set-cookie")?.split(";")[0];
+  if (!cookie || me.data.role !== "admin") {
+    console.error(`signed in as ${me.data.name} but that account is not an admin`);
+    process.exit(1);
+  }
+  console.log(`signed in as ${me.data.name} (admin)\n`);
+
+  let ok = 0;
+  for (const p of plans) {
+    const r = p.row;
+    const res = await fetch(`${base}/api/entries/${r.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ startedAt: p.newStart, stoppedAt: p.newStop }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { data?: { startedAt: string; stoppedAt: string; durationSecs: number }; error?: string };
+    const good = res.ok && body.data?.startedAt === p.newStart && body.data?.stoppedAt === p.newStop && body.data?.durationSecs === r.durationSecs;
+    console.log(`${good ? "ok  " : "FAIL"} ${r.member.padEnd(19)} ${r.startedAt} -> ${p.newStart}  ${hrs(r.durationSecs)}h` + (good ? "" : `  (${res.status}: ${body.error ?? "unexpected response"})`));
+    if (good) ok++;
+  }
+  // Sign out so the session minted for this run doesn't linger.
+  await fetch(`${base}/api/auth/logout`, { method: "POST", headers: { cookie } }).catch(() => {});
+  console.log(`\napplied via ${base}: ${ok}/${plans.length} row(s) updated${ok < plans.length ? " — re-run the preview to see what is left" : ""}`);
+  if (ok < plans.length) process.exit(1);
+}
+
 // ---------- main ----------
 async function main() {
 const IST = "Asia/Kolkata", CT = "America/Chicago";
@@ -217,7 +292,6 @@ for (const r of inScope) {
 }
 plans.sort((a, b) => a.row.member.localeCompare(b.row.member) || a.row.startedAt.localeCompare(b.row.startedAt));
 
-const hrs = (s: number) => (s / 3600).toString();
 console.log(`source: ${CSV ?? DB}   mode: ${APPLY ? "APPLY" : "dry run"}   since: ${SINCE.slice(0, 10)}${ONLY_USER ? `   user: ${ONLY_USER}` : ""}`);
 console.log(`rows: ${rows.length} total · ${uninvoiced.length} uninvoiced · ${inScope.length} on/after since · ${plans.length} will move · ${skipped.length} in scope but skipped · ${leftAlone.length} uninvoiced but before since (untouched)\n`);
 
@@ -254,8 +328,14 @@ if (APPLY) {
   const upd = db!.prepare("UPDATE time_entries SET started_at = ?, stopped_at = ? WHERE id = ? AND invoice_period_id IS NULL");
   const n = db!.transaction(() => plans.reduce((acc, p) => acc + upd.run(p.newStart, p.newStop, p.row.id).changes, 0))();
   console.log(`applied: ${n} row(s) updated`);
+} else if (APPLY_VIA) {
+  if (!plans.length) { console.log("nothing to apply"); return; }
+  console.log(`about to update the ${plans.length} row(s) above through ${APPLY_VIA}.`);
+  const go = process.env.OT_YES === "1" ? "yes" : await ask("Type yes to continue: ");
+  if (go !== "yes") { console.log("aborted — nothing changed"); return; }
+  await applyViaApi(APPLY_VIA, plans);
 } else if (plans.length) {
-  console.log(`dry run — nothing written. Re-run with --db <file> --apply to write these ${plans.length} row(s).`);
+  console.log(`dry run — nothing written. Re-run with --apply-via <url> (live app) or --db <file> --apply to write these ${plans.length} row(s).`);
 }
 }
 
