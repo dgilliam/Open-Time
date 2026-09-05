@@ -145,9 +145,42 @@ const fmtOff = (m: number) => `${m < 0 ? "-" : "+"}${String(Math.floor(Math.abs(
 
 interface Plan { row: Row; offsetMin: number; localDate: string; newStart: string; newStop: string }
 
-function plan(r: Row): Plan | null {
+/**
+ * Per-member zone check (added after the first production preview). A
+ * round start time on a MANUAL entry also yields a "plausible" 09:00 offset,
+ * and one member's manual rows scattered across nine implied zones. Real grid
+ * rows all share the submitter's actual offset, so a row only qualifies when
+ * its implied offset is the member's modal one and that mode has >= 2 rows.
+ * Moving a manual row would re-date a real timestamp, which is worse than
+ * leaving it.
+ */
+function modalOffsets(rows: Row[]): Map<string, number> {
+  const counts = new Map<string, Map<number, number>>();
+  for (const r of rows) {
+    const off = impliedOffsetMin(r);
+    if (off === null) continue;
+    const m = counts.get(r.member) ?? new Map<number, number>();
+    m.set(off, (m.get(off) ?? 0) + 1);
+    counts.set(r.member, m);
+  }
+  // The mode must be a clear MAJORITY of the member's round-time rows, not
+  // merely the most frequent value. A member who never uses the grid still
+  // has a "most common" implied offset among their manual entries (one
+  // production member: 2 of 11 rows at +03:30 — a zone nobody here lives
+  // in). Real grid users cluster: 4 of 5, 2 of 3.
+  const modal = new Map<string, number>();
+  for (const [member, m] of counts) {
+    const total = Array.from(m.values()).reduce((a, b) => a + b, 0);
+    const [off, n] = Array.from(m).sort((a, b) => b[1] - a[1])[0];
+    if (n >= 2 && n * 2 > total) modal.set(member, off);
+  }
+  return modal;
+}
+
+function plan(r: Row, expectedOffset: number | undefined): Plan | null {
   const off = impliedOffsetMin(r);
   if (off === null) return null;
+  if (expectedOffset === undefined || off !== expectedOffset) return null;
   const local = new Date(new Date(r.startedAt).getTime() + off * 60_000);
   const localDate = local.toISOString().slice(0, 10);
   const newStart = `${localDate}T12:00:00.000Z`;
@@ -169,11 +202,18 @@ const uninvoiced = rows.filter((r) => !r.invoicePeriod);
 const inScope = uninvoiced.filter((r) => r.startedAt >= SINCE);
 const leftAlone = uninvoiced.filter((r) => r.startedAt < SINCE);
 
+const modal = modalOffsets(uninvoiced);
 const plans: Plan[] = [], skipped: { row: Row; why: string }[] = [];
 for (const r of inScope) {
-  const p = plan(r);
-  if (p) plans.push(p);
-  else skipped.push({ row: r, why: r.startedAt.endsWith("T12:00:00.000Z") ? "already at noon UTC" : "not a grid row (timer/manual — real timestamp, left as-is)" });
+  const p = plan(r, modal.get(r.member));
+  if (p) { plans.push(p); continue; }
+  const off = impliedOffsetMin(r);
+  let why: string;
+  if (r.startedAt.endsWith("T12:00:00.000Z")) why = "already at noon UTC";
+  else if (off === null) why = "timer/manual — real timestamp, left as-is";
+  else if (modal.get(r.member) === undefined) why = `round time but no consistent zone for this member (implied ${fmtOff(off)}) — treated as manual`;
+  else why = `round time but implied ${fmtOff(off)} ≠ member's zone ${fmtOff(modal.get(r.member)!)} — treated as manual`;
+  skipped.push({ row: r, why });
 }
 plans.sort((a, b) => a.row.member.localeCompare(b.row.member) || a.row.startedAt.localeCompare(b.row.startedAt));
 
