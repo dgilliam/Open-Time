@@ -290,7 +290,13 @@ export function reportsCsvUrl(opts: {
 
 // ---------- timesheet ----------
 
-export function setTimesheetCell(input: { task: string; date: string; hours: number }): Promise<{ hours: number }> {
+export function setTimesheetCell(input: {
+  task: string;
+  date: string;
+  hours: number;
+  /** Admin only (v3.14): edit this member's timesheet instead of the caller's. */
+  userId?: string;
+}): Promise<{ hours: number }> {
   return request<{ hours: number }>("/api/timesheet/cell", {
     method: "PUT",
     body: JSON.stringify({ ...input, tz: BROWSER_TZ }),

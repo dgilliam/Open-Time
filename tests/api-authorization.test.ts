@@ -24,6 +24,7 @@ const reportsRoute = await import("../src/app/api/reports/route");
 const reportsCsvRoute = await import("../src/app/api/reports/csv/route");
 const tasksRoute = await import("../src/app/api/tasks/route");
 const taskByIdRoute = await import("../src/app/api/tasks/[id]/route");
+const timesheetCellRoute = await import("../src/app/api/timesheet/cell/route");
 
 function resetDb() {
   db.exec("DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM sessions; DELETE FROM users;");
@@ -751,5 +752,35 @@ describe("PATCH /api/tasks/[id] authorization (v2.6 wrap-up metadata)", () => {
       { params: Promise.resolve({ id: bobsTask.id }) }
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("PUT /api/timesheet/cell with userId (v3.14 admin view-as-member)", () => {
+  const cell = (token: string, body: Record<string, unknown>) =>
+    timesheetCellRoute.PUT(req("/api/timesheet/cell", { method: "PUT", token, body }));
+
+  it("admin fills a member's cell; the entry belongs to the member", async () => {
+    const res = await cell(adminToken, { userId: userA.id, task: "ab1-alice-cell", date: "2026-02-02", hours: 3 });
+    expect(res.status).toBe(200);
+    const entries = repo.listEntries({ userId: userA.id });
+    expect(entries.some((e) => e.taskName === "AB1-alice-cell" && e.durationSecs === 3 * 3600)).toBe(true);
+    expect(repo.listEntries({ userId: admin.id }).some((e) => e.taskName === "AB1-alice-cell")).toBe(false);
+  });
+
+  it("403s a member targeting another member's timesheet", async () => {
+    const res = await cell(tokenA, { userId: userB.id, task: "ab1-nope", date: "2026-02-02", hours: 1 });
+    expect(res.status).toBe(403);
+    expect(repo.listEntries({ userId: userB.id }).some((e) => e.taskName === "AB1-nope")).toBe(false);
+  });
+
+  it("a member passing their own userId is allowed (same as omitting it)", async () => {
+    const res = await cell(tokenA, { userId: userA.id, task: "ab1-self", date: "2026-02-02", hours: 1 });
+    expect(res.status).toBe(200);
+  });
+
+  it("omitting userId still edits the caller's own timesheet", async () => {
+    const res = await cell(tokenB, { task: "ab1-bob-cell", date: "2026-02-03", hours: 2 });
+    expect(res.status).toBe(200);
+    expect(repo.listEntries({ userId: userB.id }).some((e) => e.taskName === "AB1-bob-cell")).toBe(true);
   });
 });

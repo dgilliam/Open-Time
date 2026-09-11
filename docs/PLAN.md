@@ -737,6 +737,27 @@ Founder feedback: a per-member total on the Dashboard Team table.
   only the days that belong to the displayed month, not the neighbouring
   days the 6-week grid also shows.
 
+## v3.14 — Admin "Viewing" picker on the Time entry page (2026-09-11)
+
+Founder feedback: the admin never logs time, so `/` was permanently blank
+for them. The v2 plan explicitly scoped a person-selector OUT of this page;
+that scoping is reversed here for admins only.
+
+- Admins get a **Viewing** `UserSelect` above the Week | Timesheet | Month
+  toggle, defaulting to themselves. Members never see it, and the API
+  403s any non-admin `userId` regardless.
+- Picking a member renders that member's entries in all three modes, and
+  the admin can add (day `+`, timesheet cells, `+ Add row`), edit, and
+  delete them. Entries and calendar already honoured `userId`; the one
+  API change is `PUT /api/timesheet/cell` accepting an optional `userId`
+  under the same self-or-admin rule as `POST /api/entries` (v3.3). The
+  acting user stays the caller, so an admin bypasses invoice locks here
+  exactly as they do in the entry dialog.
+- The **timer and "start again" are hidden** while viewing someone else —
+  both act on the caller's own timer, and a running admin timer showing
+  inside a member's week would be a lie. A one-line note says why.
+- Month heatmap is refetched when the viewed member changes.
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old

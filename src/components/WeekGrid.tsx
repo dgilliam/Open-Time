@@ -102,7 +102,8 @@ export function WeekGrid({
   onStatusSaved: () => void;
   onDelete: (id: string) => void;
   /** "Start again" (v3.2): start/swap the timer onto this card's task. */
-  onStartAgain: (taskName: string) => void;
+  /** Omit to hide ▶ (admin view-as-member, v3.14 — it would start the admin's own timer). */
+  onStartAgain?: (taskName: string) => void;
 }) {
   const { user } = useSession();
   const isAdmin = user?.role === "admin";
@@ -253,18 +254,20 @@ export function WeekGrid({
                               task (allowed even on locked entries — a new
                               session is a new, uninvoiced entry), × deletes.
                               ▶ takes the corner slot; × sits beside it. */}
-                          <button
-                            type="button"
-                            className="btn-icon entry-card-restart"
-                            aria-label={`Start timer for ${entry.taskName}`}
-                            title="Start again"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onStartAgain(entry.taskName);
-                            }}
-                          >
-                            ▶
-                          </button>
+                          {onStartAgain && (
+                            <button
+                              type="button"
+                              className="btn-icon entry-card-restart"
+                              aria-label={`Start timer for ${entry.taskName}`}
+                              title="Start again"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onStartAgain(entry.taskName);
+                              }}
+                            >
+                              ▶
+                            </button>
+                          )}
                           {!locked && (
                             <button
                               type="button"

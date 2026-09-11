@@ -85,6 +85,7 @@ export function TimesheetGrid({
   onTaskClick,
   onChanged,
   onStartAgain,
+  forUserId,
 }: {
   /** Sunday (local midnight) of the viewed week. */
   weekStart: Date;
@@ -95,8 +96,14 @@ export function TimesheetGrid({
   onTaskClick: (entry: TimeEntry) => void;
   /** Refetch callback after a cell save. */
   onChanged: () => Promise<void> | void;
-  /** "Start again" (v3.2): start/swap the timer onto this row's task. */
-  onStartAgain: (taskName: string) => void;
+  /**
+   * "Start again" (v3.2): start/swap the timer onto this row's task. Omit to
+   * hide the ▶ — the admin view-as-member mode (v3.14) does, since it would
+   * start the ADMIN's timer, not the viewed member's.
+   */
+  onStartAgain?: (taskName: string) => void;
+  /** Admin only (v3.14): save cells to this member's timesheet instead of the caller's. */
+  forUserId?: string;
 }) {
   const { user } = useSession();
   const isAdmin = user?.role === "admin";
@@ -180,7 +187,7 @@ export function TimesheetGrid({
     setEditing(null);
     setError(null);
     try {
-      await setTimesheetCellApi({ task: row.displayName, date: dateKey, hours: parsed });
+      await setTimesheetCellApi({ task: row.displayName, date: dateKey, hours: parsed, userId: forUserId });
       await onChanged();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "failed to save cell");
@@ -253,15 +260,17 @@ export function TimesheetGrid({
             {rows.map((row) => (
               <tr key={row.key}>
                 <td className="mono timesheet-task-cell">
-                  <button
-                    type="button"
-                    className="btn-icon timesheet-restart"
-                    aria-label={`Start timer for ${row.displayName}`}
-                    title="Start again"
-                    onClick={() => onStartAgain(row.displayName)}
-                  >
-                    ▶
-                  </button>
+                  {onStartAgain && (
+                    <button
+                      type="button"
+                      className="btn-icon timesheet-restart"
+                      aria-label={`Start timer for ${row.displayName}`}
+                      title="Start again"
+                      onClick={() => onStartAgain(row.displayName)}
+                    >
+                      ▶
+                    </button>
+                  )}
                   {row.refEntry ? (
                     <button type="button" className="task-name-link" onClick={() => onTaskClick(row.refEntry!)}>
                       {row.displayName}

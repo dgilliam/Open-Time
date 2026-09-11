@@ -4,8 +4,12 @@
 // Month toggle. Week mode = WeekGrid (T27). Timesheet mode (v3.1) revives
 // the retired /timesheet grid as a component sharing this page's week state
 // and entry data. Month mode reuses MonthCalendar + Heatmap exactly as the
-// retired /calendar page did, self-only (no admin person-selector here —
-// that stays out of scope per the plan). Toggle state is plain useState, not
+// retired /calendar page did. v3.14: admins get a "Viewing" member picker
+// above the mode toggle — the founder never logs time, so this page was
+// permanently blank for them. Picking someone else renders their entries in
+// all three modes and lets the admin add/edit/delete them (the API already
+// allowed that); the timer and "start again" are hidden in that state
+// because both act on the CALLER's timer. Toggle state is plain useState, not
 // persisted to localStorage: it's a cheap default and nothing in feedback
 // asked for cross-visit persistence.
 // AppShell guarantees a signed-in user by the time this renders.
@@ -16,11 +20,12 @@ import {
   deleteEntry,
   getRunningEntry,
   listEntries,
+  listUsers,
   startTimer,
   stopTimer,
 } from "@/lib/api";
 import { addDays, dateInputValue, startOfDay, startOfMonth, startOfWeek, startOfWeekSun, toIso } from "@/lib/format";
-import type { CalendarDay, TimeEntry } from "@/lib/types";
+import type { CalendarDay, TimeEntry, User } from "@/lib/types";
 import { EntryDialog } from "@/components/EntryDialog";
 import { Heatmap } from "@/components/Heatmap";
 import { MonthCalendar } from "@/components/MonthCalendar";
@@ -28,6 +33,8 @@ import { TaskWrapUpDialog } from "@/components/TaskWrapUpDialog";
 import { TimerBar } from "@/components/TimerBar";
 import { TimesheetGrid } from "@/components/TimesheetGrid";
 import { WeekGrid } from "@/components/WeekGrid";
+import { UserSelect } from "@/components/UserSelect";
+import { useSession } from "@/components/SessionContext";
 
 type Mode = "week" | "timesheet" | "month";
 
@@ -65,6 +72,15 @@ function defaultAddTimeRange(day: Date): { startedAt: string; stoppedAt: string 
 }
 
 export default function Home() {
+  const { user } = useSession();
+  const isAdmin = user?.role === "admin";
+  // v3.14: whose time this page shows. Defaults to the signed-in user; only
+  // an admin can point it at someone else (the API 403s everyone else).
+  const [users, setUsers] = useState<User[]>([]);
+  const [viewedUserId, setViewedUserId] = useState<string>(() => user?.id ?? "");
+  const viewingOther = Boolean(user) && viewedUserId !== user!.id;
+  const viewedUser = viewingOther ? users.find((u) => u.id === viewedUserId) ?? null : null;
+
   const [running, setRunning] = useState<TimeEntry | null>(null);
   const [taskInput, setTaskInput] = useState("");
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekSun(new Date()));
@@ -82,13 +98,20 @@ export default function Home() {
   const [heatmapDays, setHeatmapDays] = useState<{ date: Date; hours: number }[]>([]);
   const [heatmapReady, setHeatmapReady] = useState(false);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    listUsers()
+      .then(setUsers)
+      .catch(() => setUsers([]));
+  }, [isAdmin]);
+
   const loadWeek = useCallback(async (viewedWeekStart: Date) => {
     const from = toIso(viewedWeekStart);
     const rangeEnd = addDays(viewedWeekStart, 6);
     const to = toIso(new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59, 999));
-    const entries = await listEntries({ from, to });
+    const entries = await listEntries({ userId: viewedUserId, from, to });
     setWeekEntries(entries.filter((e) => e.stoppedAt !== null));
-  }, []);
+  }, [viewedUserId]);
 
   useEffect(() => {
     (async () => {
@@ -109,15 +132,20 @@ export default function Home() {
     loadWeek(weekStart);
   }, [weekStart, ready, loadWeek]);
 
-  // Month mode: month grid data, refetched on month navigation. Self-only
-  // (listEntries defaults to the caller), bucketed in the browser so a day
-  // means the viewer's day, not the server's (v3.4.1).
+  // Month mode: month grid data, refetched on month navigation and when the
+  // viewed member changes, bucketed in the browser so a day means the
+  // viewer's day, not the server's (v3.4.1).
   useEffect(() => {
     if (!ready || mode !== "month") return;
-    listEntries({ from: toIso(startOfMonth(month)), to: endOfMonthIso(month) })
+    listEntries({ userId: viewedUserId, from: toIso(startOfMonth(month)), to: endOfMonthIso(month) })
       .then((entries) => setMonthData(bucketByLocalDate(entries)))
       .catch(() => setMonthData([]));
-  }, [ready, mode, month]);
+  }, [ready, mode, month, viewedUserId]);
+
+  // Switching member invalidates the once-per-visit heatmap.
+  useEffect(() => {
+    setHeatmapReady(false);
+  }, [viewedUserId]);
 
   // Month mode: heatmap covers the last ~12 months, fetched once on first
   // entry into month mode (not on month navigation).
@@ -126,7 +154,7 @@ export default function Home() {
     const today = startOfDay(new Date());
     const rangeEnd = addDays(startOfWeek(today), 6);
     const rangeStart = startOfWeek(new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() + 1));
-    listEntries({ from: toIso(rangeStart), to: toIso(rangeEnd) })
+    listEntries({ userId: viewedUserId, from: toIso(rangeStart), to: toIso(rangeEnd) })
       .then((entries) => {
         const byDate = new Map(bucketByLocalDate(entries).map((d) => [d.date, d.hours]));
         const days: { date: Date; hours: number }[] = [];
@@ -137,7 +165,7 @@ export default function Home() {
       })
       .catch(() => setHeatmapDays([]))
       .finally(() => setHeatmapReady(true));
-  }, [ready, mode, heatmapReady]);
+  }, [ready, mode, heatmapReady, viewedUserId]);
 
   async function handleStart() {
     setError(null);
@@ -207,16 +235,30 @@ export default function Home() {
   return (
     <div className="page">
       <h1>Time entry</h1>
-      <TimerBar
-        running={running}
-        taskInput={taskInput}
-        onTaskInputChange={setTaskInput}
-        onStart={handleStart}
-        onStop={handleStop}
-        starting={starting}
-        stopping={stopping}
-        error={error}
-      />
+      {isAdmin && users.length > 0 && (
+        <div className="toolbar">
+          <UserSelect users={users} value={viewedUserId} onChange={setViewedUserId} />
+          {viewingOther && (
+            <span className="muted">
+              Showing {viewedUser?.name ?? "this member"}&rsquo;s entries. You can add, edit and delete them;
+              the timer and &ldquo;start again&rdquo; are hidden because they run on <em>your</em> clock.
+            </span>
+          )}
+        </div>
+      )}
+      {!viewingOther && (
+        <TimerBar
+          running={running}
+          taskInput={taskInput}
+          onTaskInputChange={setTaskInput}
+          onStart={handleStart}
+          onStop={handleStop}
+          starting={starting}
+          stopping={stopping}
+          error={error}
+        />
+      )}
+      {viewingOther && error && <p className="error-text">{error}</p>}
       <div className="preset-group">
         <button
           type="button"
@@ -245,13 +287,13 @@ export default function Home() {
           weekStart={weekStart}
           onWeekStartChange={setWeekStart}
           entries={weekEntries}
-          running={running}
+          running={viewingOther ? null : running}
           onAdd={(day) => setAddingDay(day)}
           onEdit={setEditing}
           onTaskClick={(entry) => setWrapUp(entry)}
           onStatusSaved={() => loadWeek(weekStart)}
           onDelete={handleDelete}
-          onStartAgain={handleStartAgain}
+          onStartAgain={viewingOther ? undefined : handleStartAgain}
         />
       )}
       {mode === "timesheet" && (
@@ -261,7 +303,8 @@ export default function Home() {
           entries={weekEntries}
           onTaskClick={(entry) => setWrapUp(entry)}
           onChanged={() => loadWeek(weekStart)}
-          onStartAgain={handleStartAgain}
+          onStartAgain={viewingOther ? undefined : handleStartAgain}
+          forUserId={viewingOther ? viewedUserId : undefined}
         />
       )}
       {mode === "month" && (
@@ -292,6 +335,7 @@ export default function Home() {
       {addingDay && (
         <EntryDialog
           createDefaults={defaultAddTimeRange(addingDay)}
+          createFor={viewingOther && viewedUser ? { userId: viewedUser.id, userName: viewedUser.name } : undefined}
           onClose={() => setAddingDay(null)}
           onSaved={() => {
             setAddingDay(null);
