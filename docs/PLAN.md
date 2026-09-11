@@ -732,6 +732,10 @@ Founder feedback: a per-member total on the Dashboard Team table.
 - This is the one hours figure that cannot vary by viewer: with no day
   window there is nothing for a timezone to move (see v3.12 for why the
   ranged numbers can).
+- Same request for the Time entry page's **Month** view: a "Month total"
+  in the calendar header, mirroring the Week view's "Week total". Sums
+  only the days that belong to the displayed month, not the neighbouring
+  days the 6-week grid also shows.
 
 ## Task breakdown (sequential executor runs)
 

@@ -37,6 +37,14 @@ export function MonthCalendar({
 
   const label = month.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
+  // Month total (v3.13): sum over the days that belong to THIS month only —
+  // the 6-week grid also paints the leading/trailing days of the neighbours,
+  // and those are not what "September total" should mean.
+  const monthTotalSecs = days.reduce((sum, d) => {
+    if (d.getMonth() !== monthStart.getMonth()) return sum;
+    return sum + (byDate.get(dateInputValue(d)) ?? 0) * 3600;
+  }, 0);
+
   return (
     <div className="month-calendar">
       <div className="toolbar">
@@ -50,6 +58,10 @@ export function MonthCalendar({
         <button type="button" className="btn" onClick={onToday}>
           Today
         </button>
+        {/* Same class as the Week view's "Week total" so the two headers match. */}
+        <span className="week-total">
+          Month total <span className="strong">{hoursLabel(monthTotalSecs)}</span>
+        </span>
       </div>
       <div className="month-grid-scroll">
         <div className="month-grid">
