@@ -1177,6 +1177,14 @@ th.num.sortable button {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  /* One week column = cell + gap. The month-label row and the cell grid
+     MUST use the same two values, or the labels drift right of the cells
+     by (difference × ~53 weeks) — which is how Aug/Sep ended up floating
+     over empty space (2026-09-11). Everything below derives from these. */
+  --heatmap-cell: 11px;
+  --heatmap-gap: 3px;
+  --heatmap-row-labels: 28px;
+  --heatmap-body-gap: 6px;
 }
 
 .heatmap-scroll {
@@ -1186,12 +1194,13 @@ th.num.sortable button {
 
 .heatmap-months {
   display: flex;
-  gap: 3px;
-  margin-left: 28px;
+  gap: var(--heatmap-gap);
+  /* Row-label column plus the body gap, so label 0 sits over week 0. */
+  margin-left: calc(var(--heatmap-row-labels) + var(--heatmap-body-gap));
 }
 
 .heatmap-month-label {
-  width: 14px;
+  width: var(--heatmap-cell);
   flex-shrink: 0;
   font-size: 11px;
   color: var(--muted);
@@ -1205,14 +1214,14 @@ th.num.sortable button {
 
 .heatmap-body {
   display: flex;
-  gap: 6px;
+  gap: var(--heatmap-body-gap);
 }
 
 .heatmap-row-labels {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  width: 28px;
+  gap: var(--heatmap-gap);
+  width: var(--heatmap-row-labels);
   flex-shrink: 0;
 }
 
@@ -1225,18 +1234,20 @@ th.num.sortable button {
 
 .heatmap-grid {
   display: flex;
-  gap: 3px;
+  gap: var(--heatmap-gap);
 }
 
 .heatmap-col {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--heatmap-gap);
 }
 
 .heatmap-cell {
-  width: 11px;
-  height: 11px;
+  width: var(--heatmap-cell);
+  height: var(--heatmap-cell);
+  /* The 1px border must not widen the cell past --heatmap-cell. */
+  box-sizing: border-box;
   border-radius: 2px;
   background: var(--surface);
   border: 1px solid var(--border);
