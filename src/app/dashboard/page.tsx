@@ -55,7 +55,10 @@ const ENTRIES_CAP = 200;
 
 interface ContributorRow {
   user: User;
+  /** Hours inside the selected date range. */
   hours: number;
+  /** All-time hours (v3.13) — no date window, so no timezone can move it. */
+  totalHours: number;
   activeDays: number;
   lastWorked: string | null;
 }
@@ -74,6 +77,7 @@ const TEAM_COLUMNS: Record<string, SortableColumn<ContributorRow>> = {
   name: { accessor: (r) => r.user.name, defaultDir: "asc" },
   project: { accessor: (r) => r.user.project ?? "", defaultDir: "asc" },
   hours: { accessor: (r) => r.hours, defaultDir: "desc" },
+  totalHours: { accessor: (r) => r.totalHours, defaultDir: "desc" },
   activeDays: { accessor: (r) => r.activeDays, defaultDir: "desc" },
   lastWorked: { accessor: (r) => r.lastWorked ?? "", defaultDir: "desc" },
 };
@@ -153,6 +157,10 @@ export default function DashboardPage() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [userReport, setUserReport] = useState<ReportResult | null>(null);
+  // Same groupBy=user report with NO range: every member's all-time hours
+  // (v3.13). Fetched alongside the ranged one so an edit in the entries
+  // table refreshes both.
+  const [allTimeReport, setAllTimeReport] = useState<ReportResult | null>(null);
   const [taskReport, setTaskReport] = useState<ReportResult | null>(null);
   const [allEntries, setAllEntries] = useState<TimeEntry[]>([]);
   const [entriesFilter, setEntriesFilter] = useState("all");
@@ -179,12 +187,14 @@ export default function DashboardPage() {
 
   const loadAll = useCallback(async () => {
     const { from: fromIso, to: toIsoStr } = activeIsoRange(preset, customFrom, customTo);
-    const [userRep, taskRep, entriesList] = await Promise.all([
+    const [userRep, allTimeRep, taskRep, entriesList] = await Promise.all([
       getReport({ groupBy: "user", from: fromIso, to: toIsoStr }),
+      getReport({ groupBy: "user" }),
       getReport({ userId: "all", groupBy: "task", from: fromIso, to: toIsoStr }),
       listEntries({ userId: "all", from: fromIso, to: toIsoStr }),
     ]);
     setUserReport(userRep);
+    setAllTimeReport(allTimeRep);
     setTaskReport(taskRep);
     setAllEntries(entriesList);
   }, [preset, customFrom, customTo]);
@@ -219,18 +229,28 @@ export default function DashboardPage() {
 
   const contributorRows = useMemo(() => {
     const byUserId = new Map((userReport?.groups ?? []).map((g) => [g.id, g]));
+    const allTimeByUserId = new Map((allTimeReport?.groups ?? []).map((g) => [g.id, g.hours]));
     return users
       .map((u) => {
         const group = byUserId.get(u.id);
         return {
           user: u,
           hours: group?.hours ?? 0,
+          totalHours: allTimeByUserId.get(u.id) ?? 0,
           activeDays: group?.dates.length ?? 0,
           lastWorked: group?.lastWorked ?? null,
         };
       })
       .sort((a, b) => b.hours - a.hours || a.user.name.localeCompare(b.user.name));
-  }, [users, userReport]);
+  }, [users, userReport, allTimeReport]);
+
+  // Footer for the new column: the sum over the rows shown, so it always
+  // matches the table above it (removed members are not listed, so their
+  // hours are not counted here either).
+  const teamTotalAllTime = useMemo(
+    () => contributorRows.reduce((sum, r) => sum + r.totalHours, 0),
+    [contributorRows]
+  );
 
   const taskRows = useMemo(() => taskReport?.groups ?? [], [taskReport]);
 
@@ -356,6 +376,7 @@ export default function DashboardPage() {
                     <SortTh label="Name" sortKey="name" controller={teamSort} />
                     <SortTh label="Project" sortKey="project" controller={teamSort} />
                     <SortTh label="Hours" sortKey="hours" controller={teamSort} numeric />
+                    <SortTh label="Total hours" sortKey="totalHours" controller={teamSort} numeric />
                     <SortTh label="Active days" sortKey="activeDays" controller={teamSort} numeric />
                     <SortTh label="Last worked" sortKey="lastWorked" controller={teamSort} />
                   </tr>
@@ -366,6 +387,9 @@ export default function DashboardPage() {
                       <td className="strong">{row.user.name}</td>
                       <td className="muted">{row.user.project ?? "—"}</td>
                       <td className="num">{hoursCell(row.hours * 3600)}</td>
+                      <td className="num muted" title="All time, independent of the date filter">
+                        {hoursCell(row.totalHours * 3600)}
+                      </td>
                       <td className="num">{row.activeDays}</td>
                       <td className="muted">
                         {row.lastWorked ? formatShortDate(parseLocalDate(row.lastWorked)) : "—"}
@@ -378,6 +402,7 @@ export default function DashboardPage() {
                     <td>Total</td>
                     <td></td>
                     <td className="num">{hoursCell((userReport?.totalHours ?? 0) * 3600)}</td>
+                    <td className="num muted">{hoursCell(teamTotalAllTime * 3600)}</td>
                     <td></td>
                     <td></td>
                   </tr>

@@ -380,6 +380,20 @@ describe("GET /api/reports groupBy=user authorization (admin only)", () => {
     expect(res.status).toBe(200);
   });
 
+  it("with no from/to returns every member's ALL-TIME hours (v3.13 dashboard Total hours)", async () => {
+    // Bob already has 1h on 2026-01-01 from beforeEach. Give Alice hours years
+    // apart so any implicit window would drop one of them.
+    repo.createEntry({ userId: userA.id, task: "ab1-old", startedAt: "2020-03-01T09:00:00.000Z", stoppedAt: "2020-03-01T11:00:00.000Z" });
+    repo.createEntry({ userId: userA.id, task: "ab1-new", startedAt: "2030-03-01T09:00:00.000Z", stoppedAt: "2030-03-01T12:00:00.000Z" });
+
+    const res = await reportsRoute.GET(req("/api/reports?groupBy=user", { token: adminToken }));
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    const hours = Object.fromEntries(data.groups.map((g: { name: string; hours: number }) => [g.name, g.hours]));
+    expect(hours).toEqual({ Alice: 5, Bob: 1 });
+    expect(data.totalHours).toBe(6);
+  });
+
   it("403s a member targeting another user's task report", async () => {
     const res = await reportsRoute.GET(
       req(`/api/reports?groupBy=task&userId=${userB.id}`, { token: tokenA })

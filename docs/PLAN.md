@@ -718,6 +718,21 @@ Fixing the variance itself is a separate decision (options weighed
 UTC so the date is stable across UTC−12..+11; or both). Deferred until the
 founder has diffed real data with these columns.
 
+## v3.13 — Dashboard "Total hours" column (2026-09-11)
+
+Founder feedback: a per-member total on the Dashboard Team table.
+
+- New **Total hours** column between Hours and Active days: the member's
+  all-time hours, independent of the date filter. Sortable; footer sums the
+  rows shown (active members only, matching the table).
+- Sourced from a second `GET /api/reports?groupBy=user` with no from/to,
+  fetched in parallel with the ranged report so an entry edit refreshes
+  both. The client's `getReport` from/to are now optional; the route always
+  accepted their absence.
+- This is the one hours figure that cannot vary by viewer: with no day
+  window there is nothing for a timezone to move (see v3.12 for why the
+  ranged numbers can).
+
 ## Task breakdown (sequential executor runs)
 
 1. **T5 — Backend v2.** New schema (drop v1 tables at startup if the old

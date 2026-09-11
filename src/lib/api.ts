@@ -223,11 +223,14 @@ export function getCalendar(opts: { userId?: string; from: string; to: string })
  */
 export function getReport(opts: {
   userId?: string;
-  from: string;
-  to: string;
+  /** Omit both for an all-time report (v3.13 dashboard "Total hours"). */
+  from?: string;
+  to?: string;
   groupBy: "task" | "user";
 }): Promise<ReportResult> {
-  const params = new URLSearchParams({ from: opts.from, to: opts.to, groupBy: opts.groupBy });
+  const params = new URLSearchParams({ groupBy: opts.groupBy });
+  if (opts.from) params.set("from", opts.from);
+  if (opts.to) params.set("to", opts.to);
   if (opts.userId) params.set("userId", opts.userId);
   if (BROWSER_TZ) params.set("tz", BROWSER_TZ);
   return request<ReportResult>(`/api/reports?${params.toString()}`);
